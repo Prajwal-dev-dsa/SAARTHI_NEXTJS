@@ -41,6 +41,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           throw new Error("No user found");
         }
 
+        if (user.isVerified === false) {
+          throw new Error("Please verify your email before logging in.");
+        }
+
         if (!user.password) {
           throw new Error("Please log in using Google.");
         }
@@ -113,8 +117,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     },
   },
   pages: {
-    signIn: "/login",
-    error: "/login",
+    signIn: "/",
+    error: "/",
   },
   session: {
     strategy: "jwt",
