@@ -7,7 +7,7 @@ interface HeroProps {
 
 export default function Hero({ onBookNowClick }: HeroProps) {
   return (
-    <main className="relative z-10 flex flex-col items-center justify-center min-h-[80vh] text-center px-4">
+    <main className="relative z-10 flex flex-col items-center pt-8 justify-center min-h-[80vh] text-center px-4">
       <motion.h1
         initial={{ y: 30, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
