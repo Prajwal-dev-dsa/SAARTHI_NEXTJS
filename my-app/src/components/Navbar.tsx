@@ -7,12 +7,14 @@ import { useSelector, useDispatch } from "react-redux";
 import { signOut } from "next-auth/react";
 import { RootState } from "../store";
 import { toggleTheme } from "../store/themeSlice";
+import { useRouter } from "next/navigation";
 
 interface NavbarProps {
   onLoginClick: () => void;
 }
 
 export default function Navbar({ onLoginClick }: NavbarProps) {
+  const router = useRouter()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isMobileProfileOpen, setIsMobileProfileOpen] = useState(false);
@@ -61,7 +63,10 @@ export default function Navbar({ onLoginClick }: NavbarProps) {
           {themeMode === "dark" ? <Sun className="w-4 h-4 text-white" /> : <Moon className="w-4 h-4 text-gray-700" />}
         </button>
 
-        <button className="w-full bg-gray-50 dark:bg-white/10 hover:bg-gray-100 dark:hover:bg-white/20 rounded-2xl p-2.5 flex justify-between items-center transition-colors group">
+        <button
+          onClick={() => router.push("/partner/onboarding/vehicle")}
+          className="w-full bg-gray-50 dark:bg-white/10 hover:bg-gray-100 dark:hover:bg-white/20 rounded-2xl p-2.5 flex justify-between items-center transition-colors group"
+        >
           <div className="flex items-center space-x-3">
             <div className="flex items-center bg-black dark:bg-white text-white dark:text-black px-2.5 py-1.5 rounded-xl space-x-1">
               <Bike className="w-3.5 h-3.5" />

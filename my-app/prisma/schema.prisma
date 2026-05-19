@@ -6,24 +6,103 @@ datasource db {
   provider = "postgresql"
 }
 
+// --- ENUMS ---
+
 enum Role {
   USER
   ADMIN
-  DRIVER
+  PARTNER
 }
 
+enum VehicleType {
+  BIKE
+  CAR
+  AUTO
+  LOADING
+  TRUCK
+}
+
+// Shared enum for both Vehicle and Document verification
+enum VerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum BankStatus {
+  NOT_ADDED
+  ADDED
+  VERIFIED
+}
+
+// --- MODELS ---
+
 model User {
-  id         String    @id @default(cuid())
-  name       String
-  email      String    @unique
-  password   String?
-  phone      String?
-  role       Role      @default(USER)
-  isVerified Boolean   @default(false)
-  verifyOtp  String?
-  otpExpiry  DateTime?
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
+  id                     String             @id @default(cuid())
+  name                   String
+  email                  String             @unique
+  password               String?
+  phone                  String?
+  role                   Role               @default(USER)
+  isVerified             Boolean            @default(false)
+  verifyOtp              String?
+  otpExpiry              DateTime?
+  partnerOnboardingSteps Int                @default(0)
+  created_at             DateTime           @default(now())
+  updated_at             DateTime           @updatedAt
+  vehicles               Vehicle[]
+  documents              PartnerDocument?
+  bankDetails            PartnerBankDetail?
 
   @@map("users")
+}
+
+model Vehicle {
+  id            String             @id @default(cuid())
+  ownerId       String
+  owner         User               @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  type          VehicleType
+  model         String
+  vehicleNumber String             @unique
+  imageUrl      String?
+  baseFare      Float?
+  pricePerKm    Float?
+  waitingCharge Float?
+  status        VerificationStatus @default(PENDING)
+  rejectReason  String?
+  isActive      Boolean            @default(false)
+  created_at    DateTime           @default(now())
+  updated_at    DateTime           @updatedAt
+
+  @@map("vehicles")
+}
+
+model PartnerDocument {
+  id                String             @id @default(cuid())
+  ownerId           String             @unique
+  owner             User               @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  aadharCardUrl     String
+  rcUrl             String
+  drivingLicenseUrl String
+  status            VerificationStatus @default(PENDING)
+  rejectReason      String?
+  created_at        DateTime           @default(now())
+  updated_at        DateTime           @updatedAt
+
+  @@map("partner_documents")
+}
+
+model PartnerBankDetail {
+  id                String     @id @default(cuid())
+  ownerId           String     @unique
+  owner             User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  accountHolderName String
+  accountNumber     String     @unique
+  ifscCode          String
+  upiId             String?
+  status            BankStatus @default(NOT_ADDED)
+  created_at        DateTime   @default(now())
+  updated_at        DateTime   @updatedAt
+
+  @@map("partner_bank_details")
 }
