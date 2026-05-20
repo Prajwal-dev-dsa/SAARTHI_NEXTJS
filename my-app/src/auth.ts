@@ -2,18 +2,19 @@ import NextAuth, { type DefaultSession } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import bcrypt from "bcryptjs";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 
-// Extend NextAuth types to recognize our custom 'id' and 'role' properties
 declare module "next-auth" {
   interface Session {
     user: {
       id: string;
       role: string;
+      partnerOnboardingSteps: number;
     } & DefaultSession["user"];
   }
   interface User {
     role?: string;
+    partnerOnboardingSteps?: number;
   }
 }
 
@@ -79,7 +80,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             data: {
               name: user.name || "User",
               email: user.email,
-              // 'role' will automatically default to 'USER' based on our Prisma schema
+              // 'role' and 'partnerOnboardingSteps' will automatically default based on our Prisma schema
             },
           });
         }
@@ -87,6 +88,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         // Attach DB info to the NextAuth user object
         user.id = dbUser.id;
         user.role = dbUser.role;
+        user.partnerOnboardingSteps = dbUser.partnerOnboardingSteps;
       }
       return true;
     },
@@ -98,9 +100,15 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.name = user.name;
         token.email = user.email;
         token.role = user.role;
+        token.partnerOnboardingSteps = user.partnerOnboardingSteps;
       }
-      if (trigger === "update" && session?.user?.role) {
-        token.role = session.user.role;
+
+      // Update trigger logic so frontend can manually refresh the token
+      if (trigger === "update" && session?.user) {
+        if (session.user.role) token.role = session.user.role;
+        if (session.user.partnerOnboardingSteps !== undefined) {
+          token.partnerOnboardingSteps = session.user.partnerOnboardingSteps;
+        }
       }
       return token;
     },
@@ -112,6 +120,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         session.user.name = token.name as string;
         session.user.email = token.email as string;
         session.user.role = token.role as string;
+        session.user.partnerOnboardingSteps =
+          token.partnerOnboardingSteps as number;
       }
       return session;
     },

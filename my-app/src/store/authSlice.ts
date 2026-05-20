@@ -1,11 +1,12 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 
 // Define how our user object looks based on our NextAuth configuration
-interface User {
+export interface User {
   id: string;
   name: string;
   email: string;
   role: string;
+  partnerOnboardingSteps?: number; 
 }
 
 interface AuthState {

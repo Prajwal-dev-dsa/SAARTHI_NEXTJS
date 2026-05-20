@@ -22,6 +22,7 @@ function StateSync() {
           name: session.user.name || "User",
           email: session.user.email || "",
           role: session.user.role || "USER",
+          partnerOnboardingSteps: session.user.partnerOnboardingSteps || 0,
         })
       );
     } else if (status === "unauthenticated") {
