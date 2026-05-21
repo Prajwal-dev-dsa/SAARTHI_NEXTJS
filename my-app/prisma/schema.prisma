@@ -22,7 +22,6 @@ enum VehicleType {
   TRUCK
 }
 
-// Shared enum for both Vehicle and Document verification
 enum VerificationStatus {
   PENDING
   APPROVED
@@ -33,6 +32,12 @@ enum BankStatus {
   NOT_ADDED
   ADDED
   VERIFIED
+}
+
+enum PartnerStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 // --- MODELS ---
@@ -48,6 +53,7 @@ model User {
   verifyOtp              String?
   otpExpiry              DateTime?
   partnerOnboardingSteps Int                @default(0)
+  partnerStatus          PartnerStatus      @default(PENDING)
   created_at             DateTime           @default(now())
   updated_at             DateTime           @updatedAt
   vehicles               Vehicle[]

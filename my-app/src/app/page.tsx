@@ -4,7 +4,7 @@ import { RootState } from "../store";
 import UserDashboard from "../components/dashboards/UserDashboard";
 import { useSelector } from "react-redux";
 import PartnerDashboard from "@/components/dashboards/PartnerDashboard";
-// import AdminDashboard from "../components/dashboards/AdminDashboard"; // (To be created later)
+import AdminDashboard from "@/components/dashboards/AdminDashboard";
 
 export default function HomePage() {
   const user = useSelector((state: RootState) => state.auth.user);
@@ -15,8 +15,7 @@ export default function HomePage() {
   }
 
   if (user?.role === "ADMIN") {
-    // return <AdminDashboard />;
-    return <div>Admin Dashboard Coming Soon...</div>;
+    return <AdminDashboard />;
   }
 
   return <UserDashboard />;
