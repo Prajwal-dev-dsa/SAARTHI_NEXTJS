@@ -6,7 +6,9 @@ export interface User {
   name: string;
   email: string;
   role: string;
-  partnerOnboardingSteps?: number; 
+  partnerOnboardingSteps?: number;
+  partnerStatus?: string;
+  rejectReason?: string | null;
 }
 
 interface AuthState {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { SessionProvider, useSession } from "next-auth/react";
+import { SessionProvider, useSession, signOut } from "next-auth/react";
 import { Provider, useDispatch, useSelector } from "react-redux";
 import { store, RootState } from "../store";
 import { setUser, logoutUser } from "../store/authSlice";
@@ -15,7 +15,14 @@ function StateSync() {
 
   // 1. Sync NextAuth Session -> Redux Store
   useEffect(() => {
-    if (status === "authenticated" && session?.user) {
+    if (session?.error === "UserDeleted") {
+      dispatch(logoutUser());
+      signOut({ callbackUrl: "/" });
+      return;
+    }
+
+    // Normal Login Sync
+    if (status === "authenticated" && session?.user && !session.error) {
       dispatch(
         setUser({
           id: session.user.id,
@@ -23,6 +30,8 @@ function StateSync() {
           email: session.user.email || "",
           role: session.user.role || "USER",
           partnerOnboardingSteps: session.user.partnerOnboardingSteps || 0,
+          partnerStatus: (session.user as any).partnerStatus || "PENDING",
+          rejectReason: (session.user as any).rejectReason || null
         })
       );
     } else if (status === "unauthenticated") {
@@ -60,7 +69,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <SessionProvider>
       <Provider store={store}>
         <AlertProvider>
-          {/* Inject our background worker here */}
           <StateSync />
           {children}
         </AlertProvider>

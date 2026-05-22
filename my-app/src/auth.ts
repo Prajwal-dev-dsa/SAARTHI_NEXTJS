@@ -4,17 +4,23 @@ import Google from "next-auth/providers/google";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 
+// Extend NextAuth types to include our new fields and error states
 declare module "next-auth" {
   interface Session {
     user: {
       id: string;
       role: string;
       partnerOnboardingSteps: number;
+      partnerStatus: string;
+      rejectReason?: string | null;
     } & DefaultSession["user"];
+    error?: string;
   }
   interface User {
     role?: string;
     partnerOnboardingSteps?: number;
+    partnerStatus?: string;
+    rejectReason?: string | null;
   }
 }
 
@@ -80,7 +86,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             data: {
               name: user.name || "User",
               email: user.email,
-              // 'role' and 'partnerOnboardingSteps' will automatically default based on our Prisma schema
             },
           });
         }
@@ -89,40 +94,64 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         user.id = dbUser.id;
         user.role = dbUser.role;
         user.partnerOnboardingSteps = dbUser.partnerOnboardingSteps;
+        user.partnerStatus = dbUser.partnerStatus;
+        user.rejectReason = dbUser.rejectReason;
       }
       return true;
     },
 
-    // token ke andar user ka data dalta hai ye function
-    jwt({ token, user, trigger, session }) {
+    async jwt({ token, user }) {
+      // 1. Initial Login: Grab the user ID
       if (user) {
         token.id = user.id;
-        token.name = user.name;
-        token.email = user.email;
-        token.role = user.role;
-        token.partnerOnboardingSteps = user.partnerOnboardingSteps;
       }
 
-      // Update trigger logic so frontend can manually refresh the token
-      if (trigger === "update" && session?.user) {
-        if (session.user.role) token.role = session.user.role;
-        if (session.user.partnerOnboardingSteps !== undefined) {
-          token.partnerOnboardingSteps = session.user.partnerOnboardingSteps;
+      // 2. On EVERY request, verify against the absolute latest DB state
+      if (token.id) {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: token.id as string },
+          select: {
+            name: true,
+            email: true,
+            role: true,
+            partnerOnboardingSteps: true,
+            partnerStatus: true,
+            rejectReason: true,
+          },
+        });
+
+        if (!dbUser) {
+          token.error = "UserDeleted";
+          return token;
         }
+
+        token.name = dbUser.name;
+        token.email = dbUser.email;
+        token.role = dbUser.role;
+        token.partnerOnboardingSteps = dbUser.partnerOnboardingSteps;
+        token.partnerStatus = dbUser.partnerStatus;
+        token.rejectReason = dbUser.rejectReason;
       }
+
       return token;
     },
 
-    // session ke andar token ka data use karke user ka data dalta hai ye function
-    session({ session, token }) {
-      if (session.user) {
+    async session({ session, token }) {
+      if (token.error === "UserDeleted") {
+        session.error = "UserDeleted";
+      }
+
+      if (session.user && token.id && !token.error) {
         session.user.id = token.id as string;
         session.user.name = token.name as string;
         session.user.email = token.email as string;
         session.user.role = token.role as string;
         session.user.partnerOnboardingSteps =
           token.partnerOnboardingSteps as number;
+        session.user.partnerStatus = token.partnerStatus as string;
+        session.user.rejectReason = token.rejectReason as string | null;
       }
+
       return session;
     },
   },

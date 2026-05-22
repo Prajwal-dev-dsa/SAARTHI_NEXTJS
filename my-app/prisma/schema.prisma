@@ -54,6 +54,7 @@ model User {
   otpExpiry              DateTime?
   partnerOnboardingSteps Int                @default(0)
   partnerStatus          PartnerStatus      @default(PENDING)
+  rejectReason           String?
   created_at             DateTime           @default(now())
   updated_at             DateTime           @updatedAt
   vehicles               Vehicle[]
