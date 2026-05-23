@@ -9,6 +9,9 @@ export interface User {
   partnerOnboardingSteps?: number;
   partnerStatus?: string;
   rejectReason?: string | null;
+  videoKycStatus?: string;
+  videoKycRoomId?: string | null;
+  videoKycRejectReason?: string | null;
 }
 
 interface AuthState {

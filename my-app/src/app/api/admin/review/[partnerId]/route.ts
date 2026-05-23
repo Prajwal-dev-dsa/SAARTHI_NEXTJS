@@ -71,6 +71,7 @@ export async function POST(
             role: "PARTNER",
             partnerStatus: "APPROVED",
             partnerOnboardingSteps: 4,
+            videoKycStatus: "PENDING",
           },
         }),
         prisma.vehicle.updateMany({

@@ -31,7 +31,10 @@ function StateSync() {
           role: session.user.role || "USER",
           partnerOnboardingSteps: session.user.partnerOnboardingSteps || 0,
           partnerStatus: (session.user as any).partnerStatus || "PENDING",
-          rejectReason: (session.user as any).rejectReason || null
+          rejectReason: (session.user as any).rejectReason || null,
+          videoKycStatus: (session.user as any).videoKycStatus || "NOT_REQUIRED",
+          videoKycRoomId: (session.user as any).videoKycRoomId || null,
+          videoKycRejectReason: (session.user as any).videoKycRejectReason || null,
         })
       );
     } else if (status === "unauthenticated") {

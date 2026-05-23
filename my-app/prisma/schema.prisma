@@ -40,6 +40,14 @@ enum PartnerStatus {
   REJECTED
 }
 
+enum VideoKycStatus {
+  NOT_REQUIRED
+  PENDING
+  IN_PROGRESS
+  APPROVED
+  REJECTED
+}
+
 // --- MODELS ---
 
 model User {
@@ -55,6 +63,9 @@ model User {
   partnerOnboardingSteps Int                @default(0)
   partnerStatus          PartnerStatus      @default(PENDING)
   rejectReason           String?
+  videoKycStatus         VideoKycStatus     @default(NOT_REQUIRED)
+  videoKycRoomId         String?            @unique
+  videoKycRejectReason   String?
   created_at             DateTime           @default(now())
   updated_at             DateTime           @updatedAt
   vehicles               Vehicle[]

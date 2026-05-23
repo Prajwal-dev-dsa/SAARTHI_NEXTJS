@@ -13,6 +13,9 @@ declare module "next-auth" {
       partnerOnboardingSteps: number;
       partnerStatus: string;
       rejectReason?: string | null;
+      videoKycStatus: string;
+      videoKycRoomId?: string | null;
+      videoKycRejectReason?: string | null;
     } & DefaultSession["user"];
     error?: string;
   }
@@ -21,6 +24,9 @@ declare module "next-auth" {
     partnerOnboardingSteps?: number;
     partnerStatus?: string;
     rejectReason?: string | null;
+    videoKycStatus: string;
+    videoKycRoomId?: string | null;
+    videoKycRejectReason?: string | null;
   }
 }
 
@@ -96,6 +102,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         user.partnerOnboardingSteps = dbUser.partnerOnboardingSteps;
         user.partnerStatus = dbUser.partnerStatus;
         user.rejectReason = dbUser.rejectReason;
+        user.videoKycStatus = dbUser.videoKycStatus;
+        user.videoKycRoomId = dbUser.videoKycRoomId;
+        user.videoKycRejectReason = dbUser.videoKycRejectReason;
       }
       return true;
     },
@@ -117,6 +126,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             partnerOnboardingSteps: true,
             partnerStatus: true,
             rejectReason: true,
+            videoKycStatus: true,
+            videoKycRoomId: true,
+            videoKycRejectReason: true,
           },
         });
 
@@ -131,6 +143,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.partnerOnboardingSteps = dbUser.partnerOnboardingSteps;
         token.partnerStatus = dbUser.partnerStatus;
         token.rejectReason = dbUser.rejectReason;
+        token.videoKycStatus = dbUser.videoKycStatus;
+        token.videoKycRoomId = dbUser.videoKycRoomId;
+        token.videoKycRejectReason = dbUser.videoKycRejectReason;
       }
 
       return token;
@@ -150,6 +165,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           token.partnerOnboardingSteps as number;
         session.user.partnerStatus = token.partnerStatus as string;
         session.user.rejectReason = token.rejectReason as string | null;
+        session.user.videoKycStatus = token.videoKycStatus as string;
+        session.user.videoKycRoomId = token.videoKycRoomId as string | null;
+        session.user.videoKycRejectReason = token.videoKycRejectReason as
+          | string
+          | null;
       }
 
       return session;

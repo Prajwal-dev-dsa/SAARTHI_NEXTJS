@@ -7,7 +7,7 @@ import { signOut } from "next-auth/react";
 import {
     Users, CheckCircle2, Clock, XCircle,
     ChevronRight, Video, CarFront, Loader2, User,
-    ChevronDown, LogOut, Moon, Sun
+    ChevronDown, LogOut, Moon, Sun, PhoneCall, PhoneForwarded
 } from "lucide-react";
 import axios from "axios";
 import { useAlert } from "../../context/AlertContext";
@@ -27,6 +27,8 @@ interface UnderReviewPartner {
     phone: string | null;
     partnerOnboardingSteps: number;
     created_at: string;
+    videoKycStatus?: string;
+    videoKycRoomId?: string;
 }
 
 export default function AdminDashboard() {
@@ -36,8 +38,10 @@ export default function AdminDashboard() {
     // State
     const [metrics, setMetrics] = useState<DashboardMetrics>({ total: 0, approved: 0, pending: 0, rejected: 0 });
     const [queue, setQueue] = useState<UnderReviewPartner[]>([]);
+    const [videoQueue, setVideoQueue] = useState<UnderReviewPartner[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [activeTab, setActiveTab] = useState("reviews");
+    const [isStartingCall, setIsStartingCall] = useState<string | null>(null);
 
     // Profile Dropdown State
     const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -45,15 +49,22 @@ export default function AdminDashboard() {
 
     // Fetch Data & Check initial theme
     useEffect(() => {
-        // Check initial theme from document class
         setIsDarkMode(document.documentElement.classList.contains("dark"));
 
         const fetchDashboardData = async () => {
             try {
-                const response = await axios.get("/api/admin/dashboard");
-                if (response.data) {
-                    setMetrics(response.data.metrics);
-                    setQueue(response.data.underReview);
+                // Fetch both standard reviews and video KYC queue concurrently
+                const [dashRes, videoRes] = await Promise.all([
+                    axios.get("/api/admin/dashboard"),
+                    axios.get("/api/admin/video-kyc")
+                ]);
+
+                if (dashRes.data) {
+                    setMetrics(dashRes.data.metrics);
+                    setQueue(dashRes.data.underReview);
+                }
+                if (videoRes.data) {
+                    setVideoQueue(videoRes.data);
                 }
             } catch (error: any) {
                 showAlert("Failed to load admin dashboard data.", "error");
@@ -73,6 +84,27 @@ export default function AdminDashboard() {
         } else {
             document.documentElement.classList.add("dark");
             setIsDarkMode(true);
+        }
+    };
+
+    // --- Start Video KYC Call ---
+    const handleStartCall = async (partnerId: string, currentStatus?: string, roomId?: string) => {
+        // If already in progress, jump straight to the room
+        if (currentStatus === "IN_PROGRESS" && roomId) {
+            router.push(`/video-kyc/${roomId}`);
+            return;
+        }
+
+        // Start new call
+        setIsStartingCall(partnerId);
+        try {
+            const res = await axios.post("/api/admin/video-kyc", { partnerId });
+            if (res.data?.roomId) {
+                router.push(`/video-kyc/${res.data.roomId}`);
+            }
+        } catch (error) {
+            showAlert("Failed to initiate video call", "error");
+            setIsStartingCall(null);
         }
     };
 
@@ -107,17 +139,18 @@ export default function AdminDashboard() {
         );
     }
 
+    // Switch array based on active tab
+    const activeList = activeTab === "reviews" ? queue : (activeTab === "video" ? videoQueue : []);
+
     return (
         <main className="min-h-screen bg-gray-50 dark:bg-[#050505] transition-colors duration-300 font-sans">
 
             {/* --- CUSTOM ADMIN NAVBAR --- */}
             <header className="sticky top-0 z-50 flex items-center justify-between px-6 md:px-12 py-4 bg-white dark:bg-[#0a0a0a] border-b border-gray-200 dark:border-gray-900 shadow-sm transition-colors duration-300">
-                {/* Logo */}
                 <div className="flex items-center cursor-pointer" onClick={() => router.push("/")}>
                     <span className="text-2xl font-black tracking-tighter text-black dark:text-white uppercase">SAARTHI</span>
                 </div>
 
-                {/* Admin Dropdown Menu */}
                 <div className="relative">
                     <button
                         onClick={() => setIsProfileOpen(!isProfileOpen)}
@@ -128,15 +161,10 @@ export default function AdminDashboard() {
                         <ChevronDown className={`w-4 h-4 transition-transform duration-300 ${isProfileOpen ? "rotate-180" : ""}`} />
                     </button>
 
-                    {/* Invisible backdrop to close dropdown when clicking outside */}
                     {isProfileOpen && (
-                        <div
-                            className="fixed inset-0 z-40"
-                            onClick={() => setIsProfileOpen(false)}
-                        />
+                        <div className="fixed inset-0 z-40" onClick={() => setIsProfileOpen(false)} />
                     )}
 
-                    {/* Animated Dropdown Menu */}
                     <AnimatePresence>
                         {isProfileOpen && (
                             <motion.div
@@ -147,8 +175,6 @@ export default function AdminDashboard() {
                                 className="absolute right-0 mt-3 w-48 bg-white dark:bg-[#0a0a0a] border border-gray-200 dark:border-gray-800 rounded-2xl shadow-xl overflow-hidden z-50"
                             >
                                 <div className="p-2 space-y-1">
-
-                                    {/* Theme Toggle Button */}
                                     <button
                                         onClick={() => {
                                             toggleTheme();
@@ -161,10 +187,7 @@ export default function AdminDashboard() {
                                             <span>{isDarkMode ? "Light Mode" : "Dark Mode"}</span>
                                         </div>
                                     </button>
-
                                     <div className="h-px bg-gray-100 dark:bg-gray-800 my-1 mx-2" />
-
-                                    {/* Logout Button */}
                                     <button
                                         onClick={() => signOut({ callbackUrl: "/" })}
                                         className="w-full flex items-center space-x-3 px-3 py-2.5 text-sm font-bold text-red-600 dark:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-xl transition-colors"
@@ -172,7 +195,6 @@ export default function AdminDashboard() {
                                         <LogOut className="w-4 h-4" />
                                         <span>Log Out</span>
                                     </button>
-
                                 </div>
                             </motion.div>
                         )}
@@ -182,8 +204,6 @@ export default function AdminDashboard() {
 
             {/* --- DASHBOARD CONTENT --- */}
             <div className="max-w-[1200px] mx-auto px-6 py-8">
-
-                {/* Header */}
                 <div className="flex items-center justify-between mb-8">
                     <div>
                         <h1 className="text-2xl md:text-3xl font-black text-black dark:text-white tracking-tight">Admin Overview</h1>
@@ -222,7 +242,7 @@ export default function AdminDashboard() {
                                 <Video className="w-4 h-4" />
                                 <span>Pending Video KYC</span>
                                 <span className={`flex items-center justify-center text-[10px] w-5 h-5 rounded-full ${activeTab === "video" ? "bg-white text-black dark:bg-black dark:text-white" : "bg-gray-100 dark:bg-gray-800"}`}>
-                                    0
+                                    {videoQueue.length}
                                 </span>
                             </button>
 
@@ -239,24 +259,26 @@ export default function AdminDashboard() {
                         </div>
                     </motion.div>
 
-                    {/* SECTION 3: Queue List */}
+                    {/* SECTION 3: Dynamic Queue List */}
                     <motion.div variants={itemVariants}>
                         <div className="flex items-center justify-between mb-4 px-2">
-                            <h3 className="text-xs font-bold tracking-widest text-gray-400 uppercase">Partner Reviews Queue</h3>
-                            <span className="text-xs text-gray-500">{queue.length} items</span>
+                            <h3 className="text-xs font-bold tracking-widest text-gray-400 uppercase">
+                                {activeTab === "reviews" ? "Partner Reviews Queue" : "Video KYC Queue"}
+                            </h3>
+                            <span className="text-xs text-gray-500">{activeList.length} items</span>
                         </div>
 
                         <div className="space-y-3">
-                            {queue.length === 0 ? (
+                            {activeList.length === 0 ? (
                                 <div className="bg-white dark:bg-[#0a0a0a] border border-gray-100 dark:border-gray-900 rounded-4xl p-12 flex flex-col items-center justify-center text-center shadow-sm">
                                     <div className="w-16 h-16 bg-gray-50 dark:bg-gray-900 rounded-full flex items-center justify-center mb-4">
                                         <CheckCircle2 className="w-8 h-8 text-green-500" />
                                     </div>
                                     <h4 className="text-lg font-bold text-black dark:text-white">All Caught Up!</h4>
-                                    <p className="text-sm text-gray-500 mt-1">There are no pending partner applications to review right now.</p>
+                                    <p className="text-sm text-gray-500 mt-1">There are no pending tasks in this queue right now.</p>
                                 </div>
                             ) : (
-                                queue.map((partner) => (
+                                activeList.map((partner) => (
                                     <motion.div
                                         key={partner.id}
                                         initial={{ opacity: 0, x: -20 }}
@@ -271,19 +293,44 @@ export default function AdminDashboard() {
 
                                             {/* Info */}
                                             <div className="flex flex-col">
-                                                <span className="font-bold text-sm text-black dark:text-white">{partner.name}</span>
+                                                <span className="font-bold text-sm text-black dark:text-white flex items-center gap-2">
+                                                    {partner.name}
+                                                    {/* LIVE Badge for In-Progress Video Calls */}
+                                                    {activeTab === "video" && partner.videoKycStatus === "IN_PROGRESS" && (
+                                                        <span className="px-2 py-0.5 bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 text-[10px] uppercase font-black tracking-wider rounded-full animate-pulse">Live</span>
+                                                    )}
+                                                </span>
                                                 <span className="text-xs text-gray-500">{partner.email}</span>
                                             </div>
                                         </div>
 
-                                        {/* Action Button */}
-                                        <button
-                                            onClick={() => router.push(`/admin/review/${partner.id}`)}
-                                            className="bg-black dark:bg-white text-white dark:text-black font-bold text-sm px-6 py-2.5 rounded-full flex items-center space-x-2 hover:scale-105 transition-transform"
-                                        >
-                                            <span>Review</span>
-                                            <ChevronRight className="w-4 h-4" />
-                                        </button>
+                                        {/* Dynamic Action Button */}
+                                        {activeTab === "reviews" ? (
+                                            <button
+                                                onClick={() => router.push(`/admin/review/${partner.id}`)}
+                                                className="bg-black dark:bg-white text-white dark:text-black font-bold text-sm px-6 py-2.5 rounded-full flex items-center space-x-2 hover:scale-105 transition-transform"
+                                            >
+                                                <span>Review</span>
+                                                <ChevronRight className="w-4 h-4" />
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={() => handleStartCall(partner.id, partner.videoKycStatus, partner.videoKycRoomId)}
+                                                disabled={isStartingCall === partner.id}
+                                                className={`font-bold text-sm px-6 py-2.5 rounded-full flex items-center space-x-2 hover:scale-105 transition-transform disabled:opacity-50
+                                                  ${partner.videoKycStatus === "IN_PROGRESS"
+                                                        ? "bg-green-600 text-white shadow-lg shadow-green-600/20"
+                                                        : "bg-black dark:bg-white text-white dark:text-black"}`}
+                                            >
+                                                {isStartingCall === partner.id ? (
+                                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                                ) : partner.videoKycStatus === "IN_PROGRESS" ? (
+                                                    <><PhoneForwarded className="w-4 h-4" /><span>Join Call</span></>
+                                                ) : (
+                                                    <><PhoneCall className="w-4 h-4" /><span>Start Video KYC</span></>
+                                                )}
+                                            </button>
+                                        )}
                                     </motion.div>
                                 ))
                             )}
