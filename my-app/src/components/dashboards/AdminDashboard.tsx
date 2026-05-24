@@ -29,6 +29,7 @@ interface UnderReviewPartner {
     created_at: string;
     videoKycStatus?: string;
     videoKycRoomId?: string;
+    vehicles?: { type: string, model: string, vehicleNumber: string }[];
 }
 
 export default function AdminDashboard() {
@@ -39,6 +40,7 @@ export default function AdminDashboard() {
     const [metrics, setMetrics] = useState<DashboardMetrics>({ total: 0, approved: 0, pending: 0, rejected: 0 });
     const [queue, setQueue] = useState<UnderReviewPartner[]>([]);
     const [videoQueue, setVideoQueue] = useState<UnderReviewPartner[]>([]);
+    const [vehicleQueue, setVehicleQueue] = useState<UnderReviewPartner[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [activeTab, setActiveTab] = useState("reviews");
     const [isStartingCall, setIsStartingCall] = useState<string | null>(null);
@@ -53,10 +55,11 @@ export default function AdminDashboard() {
 
         const fetchDashboardData = async () => {
             try {
-                // Fetch both standard reviews and video KYC queue concurrently
-                const [dashRes, videoRes] = await Promise.all([
+                // Fetch ALL THREE queues concurrently
+                const [dashRes, videoRes, vehicleRes] = await Promise.all([
                     axios.get("/api/admin/dashboard"),
-                    axios.get("/api/admin/video-kyc")
+                    axios.get("/api/admin/video-kyc"),
+                    axios.get("/api/admin/vehicle-queue")
                 ]);
 
                 if (dashRes.data) {
@@ -65,6 +68,9 @@ export default function AdminDashboard() {
                 }
                 if (videoRes.data) {
                     setVideoQueue(videoRes.data);
+                }
+                if (vehicleRes.data) {
+                    setVehicleQueue(vehicleRes.data);
                 }
             } catch (error: any) {
                 showAlert("Failed to load admin dashboard data.", "error");
@@ -89,13 +95,11 @@ export default function AdminDashboard() {
 
     // --- Start Video KYC Call ---
     const handleStartCall = async (partnerId: string, currentStatus?: string, roomId?: string) => {
-        // If already in progress, jump straight to the room
         if (currentStatus === "IN_PROGRESS" && roomId) {
             router.push(`/video-kyc/${roomId}`);
             return;
         }
 
-        // Start new call
         setIsStartingCall(partnerId);
         try {
             const res = await axios.post("/api/admin/video-kyc", { partnerId });
@@ -140,7 +144,7 @@ export default function AdminDashboard() {
     }
 
     // Switch array based on active tab
-    const activeList = activeTab === "reviews" ? queue : (activeTab === "video" ? videoQueue : []);
+    const activeList = activeTab === "reviews" ? queue : (activeTab === "video" ? videoQueue : vehicleQueue);
 
     return (
         <main className="min-h-screen bg-gray-50 dark:bg-[#050505] transition-colors duration-300 font-sans">
@@ -253,7 +257,7 @@ export default function AdminDashboard() {
                                 <CarFront className="w-4 h-4" />
                                 <span>Pending Vehicle Reviews</span>
                                 <span className={`flex items-center justify-center text-[10px] w-5 h-5 rounded-full ${activeTab === "vehicles" ? "bg-white text-black dark:bg-black dark:text-white" : "bg-gray-100 dark:bg-gray-800"}`}>
-                                    0
+                                    {vehicleQueue.length}
                                 </span>
                             </button>
                         </div>
@@ -263,7 +267,7 @@ export default function AdminDashboard() {
                     <motion.div variants={itemVariants}>
                         <div className="flex items-center justify-between mb-4 px-2">
                             <h3 className="text-xs font-bold tracking-widest text-gray-400 uppercase">
-                                {activeTab === "reviews" ? "Partner Reviews Queue" : "Video KYC Queue"}
+                                {activeTab === "reviews" ? "Partner Reviews Queue" : activeTab === "video" ? "Video KYC Queue" : "Vehicle Reviews Queue"}
                             </h3>
                             <span className="text-xs text-gray-500">{activeList.length} items</span>
                         </div>
@@ -300,11 +304,16 @@ export default function AdminDashboard() {
                                                         <span className="px-2 py-0.5 bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 text-[10px] uppercase font-black tracking-wider rounded-full animate-pulse">Live</span>
                                                     )}
                                                 </span>
-                                                <span className="text-xs text-gray-500">{partner.email}</span>
+                                                {/* Optionally show Vehicle Number if it's the vehicle tab */}
+                                                <span className="text-xs text-gray-500">
+                                                    {activeTab === "vehicles" && partner.vehicles?.[0]
+                                                        ? `${partner.vehicles[0].model} • ${partner.vehicles[0].vehicleNumber}`
+                                                        : partner.email}
+                                                </span>
                                             </div>
                                         </div>
 
-                                        {/* Dynamic Action Button */}
+                                        {/* Dynamic Action Button based on Active Tab */}
                                         {activeTab === "reviews" ? (
                                             <button
                                                 onClick={() => router.push(`/admin/review/${partner.id}`)}
@@ -313,7 +322,7 @@ export default function AdminDashboard() {
                                                 <span>Review</span>
                                                 <ChevronRight className="w-4 h-4" />
                                             </button>
-                                        ) : (
+                                        ) : activeTab === "video" ? (
                                             <button
                                                 onClick={() => handleStartCall(partner.id, partner.videoKycStatus, partner.videoKycRoomId)}
                                                 disabled={isStartingCall === partner.id}
@@ -329,6 +338,16 @@ export default function AdminDashboard() {
                                                 ) : (
                                                     <><PhoneCall className="w-4 h-4" /><span>Start Video KYC</span></>
                                                 )}
+                                            </button>
+                                        ) : (
+
+                                            <button
+                                                onClick={() => router.push(`/admin/vehicle-review/${partner.id}`)}
+                                                className="bg-black dark:bg-white text-white dark:text-black font-bold text-sm px-6 py-2.5 rounded-full flex items-center space-x-2 hover:scale-105 transition-transform"
+                                            >
+                                                <CarFront className="w-4 h-4" />
+                                                <span>Review Vehicle</span>
+                                                <ChevronRight className="w-4 h-4" />
                                             </button>
                                         )}
                                     </motion.div>

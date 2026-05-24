@@ -82,7 +82,10 @@ model Vehicle {
   type          VehicleType
   model         String
   vehicleNumber String             @unique
-  imageUrl      String?
+  frontImageUrl String?
+  backImageUrl  String?
+  leftImageUrl  String?
+  rightImageUrl String?
   baseFare      Float?
   pricePerKm    Float?
   waitingCharge Float?

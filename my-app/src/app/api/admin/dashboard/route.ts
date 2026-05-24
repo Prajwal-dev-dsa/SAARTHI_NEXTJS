@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
     // 3. Fetch "Under Review" Partners with Deep Relational Data
     const underReviewPartners = await prisma.user.findMany({
       where: {
-        partnerOnboardingSteps: { gte: 3 }, // Reached the bank step
+        partnerOnboardingSteps: { gte: 1, lte: 4 },
         partnerStatus: "PENDING",
       },
       select: {
