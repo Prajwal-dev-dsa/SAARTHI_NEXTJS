@@ -60,7 +60,7 @@ export default function HomePage() {
 
     const handleBookNowClick = () => {
         if (isAuthenticated) {
-            router.push("/book"); // Navigate to the booking page if logged in
+            router.push("/user/book"); // Navigate to the booking page if logged in
         } else {
             openModal(false); // Open the registration modal if not logged in
         }
