@@ -221,6 +221,7 @@ export default function BookRidePage() {
             return;
         }
         showAlert("Finding your captain...", "success");
+        router.push("/user/search?vehicle=Car&oLat=" + originData?.lat + "&oLng=" + originData?.lng + "&dLat=" + destData?.lat + "&dLng=" + destData?.lng + "&oAddr=" + originData?.address + "&dAddr=" + destData?.address);
     };
 
     const currentQuery = activeField === "origin" ? originQuery : destQuery;
@@ -243,20 +244,15 @@ export default function BookRidePage() {
                         </div>
                     </div>
 
-                    {/* Progress Dots */}
                     <div className="flex space-x-1.5">
                         {[0, 1, 2, 3].map((idx) => (
                             <motion.div
                                 key={idx}
-                                animate={{
-                                    backgroundColor: idx < progressCount ? "var(--color-fill)" : "var(--color-empty)",
-                                    width: idx < progressCount ? 20 : 8
-                                }}
-                                className="h-2 rounded-full transition-all duration-300"
-                                style={{
-                                    "--color-fill": "currentColor",
-                                    "--color-empty": "rgb(156 163 175 / 0.3)"
-                                } as React.CSSProperties}
+                                animate={{ width: idx < progressCount ? 20 : 8 }}
+                                className={`h-2 rounded-full transition-colors duration-300 ${idx < progressCount
+                                        ? "bg-black dark:bg-white"
+                                        : "bg-gray-300 dark:bg-gray-700"
+                                    }`}
                             />
                         ))}
                     </div>
