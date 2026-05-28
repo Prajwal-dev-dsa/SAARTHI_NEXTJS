@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { uploadOnCloudinary } from "@/lib/cloudinary";
 
 export async function GET(req: NextRequest) {
   try {
@@ -38,23 +39,19 @@ export async function POST(req: NextRequest) {
     if (!session?.user?.id)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const body = await req.json();
-    const {
-      frontImageUrl,
-      backImageUrl,
-      leftImageUrl,
-      rightImageUrl,
-      baseFare,
-      pricePerKm,
-      waitingCharge,
-    } = body;
+    // 1. Parse FormData instead of JSON
+    const formData = await req.formData();
 
-    if (!frontImageUrl || !backImageUrl || !leftImageUrl || !rightImageUrl) {
-      return NextResponse.json(
-        { error: "All 4 vehicle images are required." },
-        { status: 400 },
-      );
-    }
+    const baseFare = Number(formData.get("baseFare"));
+    const pricePerKm = Number(formData.get("pricePerKm"));
+    const waitingCharge = Number(formData.get("waitingCharge"));
+
+    // 2. Extract Files
+    const frontFile = formData.get("frontImage") as File | null;
+    const backFile = formData.get("backImage") as File | null;
+    const leftFile = formData.get("leftImage") as File | null;
+    const rightFile = formData.get("rightImage") as File | null;
+
     if (baseFare < 0 || pricePerKm < 0 || waitingCharge < 0) {
       return NextResponse.json(
         { error: "Pricing cannot be negative." },
@@ -62,21 +59,54 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    await prisma.vehicle.updateMany({
+    // 3. Fetch existing vehicle to prevent overwriting old URLs with blanks
+    const existingVehicle = await prisma.vehicle.findFirst({
       where: { ownerId: session.user.id },
+    });
+
+    if (!existingVehicle)
+      return NextResponse.json(
+        { error: "Vehicle not found." },
+        { status: 404 },
+      );
+
+    let frontUrl = existingVehicle.frontImageUrl || "";
+    let backUrl = existingVehicle.backImageUrl || "";
+    let leftUrl = existingVehicle.leftImageUrl || "";
+    let rightUrl = existingVehicle.rightImageUrl || "";
+
+    // 4. Upload new files to Cloudinary ONLY if they were attached
+    if (frontFile && frontFile.size > 0)
+      frontUrl = (await uploadOnCloudinary(frontFile)) || frontUrl;
+    if (backFile && backFile.size > 0)
+      backUrl = (await uploadOnCloudinary(backFile)) || backUrl;
+    if (leftFile && leftFile.size > 0)
+      leftUrl = (await uploadOnCloudinary(leftFile)) || leftUrl;
+    if (rightFile && rightFile.size > 0)
+      rightUrl = (await uploadOnCloudinary(rightFile)) || rightUrl;
+
+    if (!frontUrl || !backUrl || !leftUrl || !rightUrl) {
+      return NextResponse.json(
+        { error: "All 4 vehicle images are required." },
+        { status: 400 },
+      );
+    }
+
+    // 5. Update Database
+    await prisma.vehicle.update({
+      where: { id: existingVehicle.id },
       data: {
-        frontImageUrl,
-        backImageUrl,
-        leftImageUrl,
-        rightImageUrl,
-        baseFare: Number(baseFare),
-        pricePerKm: Number(pricePerKm),
-        waitingCharge: Number(waitingCharge),
+        frontImageUrl: frontUrl,
+        backImageUrl: backUrl,
+        leftImageUrl: leftUrl,
+        rightImageUrl: rightUrl,
+        baseFare,
+        pricePerKm,
+        waitingCharge,
         status: "PENDING",
       },
     });
 
-    // FIX: Bump to Step 6 and strictly reset status to PENDING for the Queue
     await prisma.user.update({
       where: { id: session.user.id },
       data: {
@@ -91,6 +121,7 @@ export async function POST(req: NextRequest) {
       { status: 200 },
     );
   } catch (error) {
+    console.error("PRICING_POST_ERR:", error);
     return NextResponse.json(
       { error: "Failed to save details." },
       { status: 500 },

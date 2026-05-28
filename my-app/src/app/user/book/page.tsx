@@ -221,7 +221,7 @@ export default function BookRidePage() {
             return;
         }
         showAlert("Finding your captain...", "success");
-        router.push("/user/search?vehicle=Car&oLat=" + originData?.lat + "&oLng=" + originData?.lng + "&dLat=" + destData?.lat + "&dLng=" + destData?.lng + "&oAddr=" + originData?.address + "&dAddr=" + destData?.address);
+        router.push("/user/search?vehicle=" + selectedVehicle + "&oLat=" + originData?.lat + "&oLng=" + originData?.lng + "&dLat=" + destData?.lat + "&dLng=" + destData?.lng + "&oAddr=" + originData?.address + "&dAddr=" + destData?.address);
     };
 
     const currentQuery = activeField === "origin" ? originQuery : destQuery;
@@ -250,8 +250,8 @@ export default function BookRidePage() {
                                 key={idx}
                                 animate={{ width: idx < progressCount ? 20 : 8 }}
                                 className={`h-2 rounded-full transition-colors duration-300 ${idx < progressCount
-                                        ? "bg-black dark:bg-white"
-                                        : "bg-gray-300 dark:bg-gray-700"
+                                    ? "bg-black dark:bg-white"
+                                    : "bg-gray-300 dark:bg-gray-700"
                                     }`}
                             />
                         ))}

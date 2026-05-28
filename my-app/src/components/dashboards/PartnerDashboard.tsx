@@ -46,6 +46,9 @@ export default function PartnerDashboard() {
     baseFare: "", pricePerKm: "", waitingCharge: "",
     frontImageUrl: "", backImageUrl: "", leftImageUrl: "", rightImageUrl: ""
   });
+  const [pricingFiles, setPricingFiles] = useState<{ [key: string]: File | null }>({
+    frontImageUrl: null, backImageUrl: null, leftImageUrl: null, rightImageUrl: null
+  });
 
   useEffect(() => setMounted(true), []);
 
@@ -96,7 +99,20 @@ export default function PartnerDashboard() {
 
     setIsSavingPricing(true);
     try {
-      await axios.post("/api/partner/vehicle/pricing", pricingData);
+      const formData = new FormData();
+      formData.append("baseFare", pricingData.baseFare);
+      formData.append("pricePerKm", pricingData.pricePerKm);
+      formData.append("waitingCharge", pricingData.waitingCharge);
+
+      if (pricingFiles.frontImageUrl) formData.append("frontImage", pricingFiles.frontImageUrl);
+      if (pricingFiles.backImageUrl) formData.append("backImage", pricingFiles.backImageUrl);
+      if (pricingFiles.leftImageUrl) formData.append("leftImage", pricingFiles.leftImageUrl);
+      if (pricingFiles.rightImageUrl) formData.append("rightImage", pricingFiles.rightImageUrl);
+
+      await axios.post("/api/partner/vehicle/pricing", formData, {
+        headers: { "Content-Type": "multipart/form-data" }
+      });
+
       showAlert("Pricing and images submitted for Final Review!", "success");
       setIsPricingModalOpen(false);
 
@@ -365,8 +381,14 @@ export default function PartnerDashboard() {
                               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                               onChange={(e) => {
                                 if (e.target.files && e.target.files[0]) {
-                                  const fakeUrl = URL.createObjectURL(e.target.files[0]);
+                                  const file = e.target.files[0];
+                                  const fakeUrl = URL.createObjectURL(file);
+
+                                  // Save the string for UI preview
                                   setPricingData({ ...pricingData, [imgField.key]: fakeUrl });
+
+                                  // Save the actual File object for the Axios upload
+                                  setPricingFiles({ ...pricingFiles, [imgField.key]: file });
                                 }
                               }}
                             />

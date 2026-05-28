@@ -11,7 +11,7 @@ export default function GeoLocationUpdater() {
 
     useEffect(() => {
         // If no user is logged in, do nothing.
-        if (!user?.id) return;
+        if (!user?.id || user?.role !== "PARTNER") return;
 
         let socket: Socket;
         let watchId: number;
@@ -43,9 +43,9 @@ export default function GeoLocationUpdater() {
                         console.error("Error watching geolocation:", error.message);
                     },
                     {
-                        enableHighAccuracy: true, // Forces GPS chip for precise tracking
-                        maximumAge: 0,            // Don't use cached locations
-                        timeout: 5000,            // Ping every 5 seconds
+                        enableHighAccuracy: false, // Set to false for desktop testing
+                        maximumAge: 10000,         // Allow cached locations up to 10 seconds old
+                        timeout: 15000,            // Give the browser 15 seconds to find you
                     }
                 );
             } else {
