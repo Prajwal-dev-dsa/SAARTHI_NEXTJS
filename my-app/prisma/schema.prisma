@@ -48,6 +48,25 @@ enum VideoKycStatus {
   REJECTED
 }
 
+enum BookingStatus {
+  IDLE
+  REQUESTED
+  AWAITING_PAYMENT
+  CONFIRMED
+  STARTED
+  COMPLETED
+  CANCELLED
+  REJECTED
+  EXPIRED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  CASH
+  FAILED
+}
+
 // --- MODELS ---
 
 model User {
@@ -74,6 +93,8 @@ model User {
   vehicles               Vehicle[]
   documents              PartnerDocument?
   bankDetails            PartnerBankDetail?
+  userBookings           Booking[]          @relation("UserBookings")
+  partnerBookings        Booking[]          @relation("PartnerBookings")
 
   @@map("users")
 }
@@ -97,6 +118,7 @@ model Vehicle {
   isActive      Boolean            @default(false)
   created_at    DateTime           @default(now())
   updated_at    DateTime           @updatedAt
+  bookings      Booking[]
 
   @@map("vehicles")
 }
@@ -129,4 +151,37 @@ model PartnerBankDetail {
   updated_at        DateTime   @updatedAt
 
   @@map("partner_bank_details")
+}
+
+model Booking {
+  id                  String        @id @default(cuid())
+  userId              String
+  partnerId           String
+  vehicleId           String
+  user                User          @relation("UserBookings", fields: [userId], references: [id])
+  partner             User          @relation("PartnerBookings", fields: [partnerId], references: [id])
+  vehicle             Vehicle       @relation(fields: [vehicleId], references: [id])
+  pickUpAddress       String
+  dropAddress         String
+  pickUpLocation      Json
+  dropLocation        Json
+  fare                Float
+  adminComission      Float         @default(0.0)
+  partnerAmount       Float         @default(0.0)
+  userMobileNumber    String
+  partnerMobileNumber String
+  bookingStatus       BookingStatus @default(IDLE)
+  paymentStatus       PaymentStatus @default(PENDING)
+  paymentDeadline     DateTime?
+  pickUpOtp           String?
+  pickupOtpExpire     DateTime?
+  dropOtp             String?
+  dropOtpExpire       DateTime?
+  created_at          DateTime      @default(now())
+  updated_at          DateTime      @updatedAt
+
+  @@index([userId])
+  @@index([partnerId])
+  @@index([bookingStatus])
+  @@map("bookings")
 }
