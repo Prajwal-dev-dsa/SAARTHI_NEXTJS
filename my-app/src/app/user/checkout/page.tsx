@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, Variants, AnimatePresence } from "framer-motion";
 import axios from "axios";
-import { io } from "socket.io-client";
+import { io, Socket } from "socket.io-client";
+import { useSelector } from "react-redux";
+import { RootState } from "@/store";
 import {
     ArrowLeft, Car, Bike, Truck, Package, CarFront,
     Clock, ShieldCheck, CreditCard, ArrowRight, Loader2,
@@ -30,7 +32,11 @@ export default function CheckoutPage() {
     const searchParams = useSearchParams();
     const router = useRouter();
     const { showAlert } = useAlert();
+    const { user } = useSelector((state: RootState) => state.auth);
+
     const [isMounted, setIsMounted] = useState(false);
+    const [socket, setSocket] = useState<Socket | null>(null);
+
     const [bookingId, setBookingId] = useState<string | null>(null);
     const [bookingStatus, setBookingStatus] = useState<string>("IDLE");
     const [isCheckingState, setIsCheckingState] = useState(true);
@@ -52,6 +58,33 @@ export default function CheckoutPage() {
     const phone = searchParams.get("phone") || "";
 
     const VehicleIcon = VEHICLE_ICONS[vehicle] || Car;
+
+    // --- Socket Initialization & Listeners ---
+    useEffect(() => {
+        if (!user?.id) return;
+
+        const socketUrl = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || "http://localhost:8000";
+        const newSocket = io(socketUrl);
+        setSocket(newSocket);
+
+        newSocket.on("connect", () => {
+            newSocket.emit("register_user", user.id);
+        });
+
+        // Instant Socket Triggers from Partner
+        newSocket.on("ride_accepted", (data) => {
+            if (data.bookingId) setBookingStatus("AWAITING_PAYMENT");
+        });
+
+        newSocket.on("ride_rejected", (data) => {
+            showAlert("Ride was rejected by driver.", "error");
+            setBookingStatus("IDLE");
+            setBookingId(null);
+            setShowPaymentOptions(false);
+        });
+
+        return () => { newSocket.disconnect(); };
+    }, [user?.id, showAlert]);
 
     // --- On Load: Check Active Booking ---
     useEffect(() => {
@@ -95,11 +128,10 @@ export default function CheckoutPage() {
             setBookingId(booking.id);
             setBookingStatus(booking.bookingStatus);
 
-            if (!res.data.isExisting) {
-                const socketUrl = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || "http://localhost:8000";
-                const socket = io(socketUrl);
+            if (!res.data.isExisting && socket) {
+                // Fire instant request to partner
                 socket.emit("new_ride_request", {
-                    partnerId: driverId, bookingId: booking.id, pickup, drop, fare
+                    partnerId: driverId, bookingId: booking.id, pickup, drop, fare, userId: user?.id
                 });
                 setBookingStatus("REQUESTED");
             }
@@ -110,7 +142,7 @@ export default function CheckoutPage() {
         }
     };
 
-    // --- 2. Polling Logic ---
+    // --- 2. Fallback Polling Logic ---
     useEffect(() => {
         let interval: NodeJS.Timeout;
         if (bookingId && bookingStatus === "REQUESTED") {
@@ -133,7 +165,7 @@ export default function CheckoutPage() {
             }, 3000);
         }
         return () => clearInterval(interval);
-    }, [bookingId, bookingStatus]);
+    }, [bookingId, bookingStatus, showAlert]);
 
     // --- 3. Animation Timeout ---
     useEffect(() => {
@@ -149,6 +181,12 @@ export default function CheckoutPage() {
         setIsCancelling(true);
         try {
             await axios.post("/api/user/booking/cancel", { bookingId });
+
+            // Instantly notify partner that user cancelled
+            if (socket) {
+                socket.emit("ride_cancelled", { partnerId: driverId, bookingId });
+            }
+
             setBookingStatus("IDLE");
             setBookingId(null);
             setShowPaymentOptions(false);
@@ -166,7 +204,6 @@ export default function CheckoutPage() {
         setIsProcessingPayment(true);
 
         if (paymentMethod === "online") {
-            // ONLINE PAYMENT FLOW
             const res = await loadRazorpayScript();
             if (!res) {
                 showAlert("Razorpay SDK failed to load. Are you online?", "error");
@@ -202,8 +239,6 @@ export default function CheckoutPage() {
                             setIsProcessingPayment(false);
                             const msg = err.response?.data?.error || "Payment verification failed";
                             showAlert(msg, "error");
-
-                            // If deadline expired during payment processing
                             if (msg.includes("expired")) {
                                 setBookingStatus("IDLE");
                                 setBookingId(null);
@@ -226,8 +261,6 @@ export default function CheckoutPage() {
                 setIsProcessingPayment(false);
                 const msg = error.response?.data?.error || "Failed to initialize payment";
                 showAlert(msg, "error");
-
-                // If deadline expired before opening Razorpay
                 if (msg.includes("expired")) {
                     setBookingStatus("IDLE");
                     setBookingId(null);
@@ -236,7 +269,6 @@ export default function CheckoutPage() {
             }
 
         } else {
-            // CASH PAYMENT FLOW
             try {
                 await axios.post("/api/payment/cash", { bookingId });
                 showAlert("Ride Confirmed! Pay with Cash at drop.", "success");
@@ -244,8 +276,6 @@ export default function CheckoutPage() {
             } catch (error: any) {
                 const msg = error.response?.data?.error || "Failed to confirm ride";
                 showAlert(msg, "error");
-
-                // If deadline expired before confirming cash
                 if (msg.includes("expired")) {
                     setBookingStatus("IDLE");
                     setBookingId(null);

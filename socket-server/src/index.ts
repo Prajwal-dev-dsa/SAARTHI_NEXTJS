@@ -25,10 +25,7 @@ io.on("connection", (socket: Socket) => {
     try {
       await prisma.user.update({
         where: { id: partnerId },
-        data: {
-          socketId: socket.id,
-          isOnline: true,
-        },
+        data: { socketId: socket.id, isOnline: true },
       });
       socket.join(`partner_${partnerId}`);
       console.log(`Partner ${partnerId} registered with socket ${socket.id}`);
@@ -37,49 +34,63 @@ io.on("connection", (socket: Socket) => {
     }
   });
 
-  // 2. Receive Live Location Updates
-  socket.on(
-    "update_location",
-    async (data: { partnerId: string; lat: number; lng: number }) => {
-      try {
-        await prisma.user.update({
-          where: { id: data.partnerId },
-          data: {
-            location: {
-              type: "Point",
-              coordinates: [data.lng, data.lat], // GeoJSON format requires [longitude, latitude]
-            },
-          },
-        });
-        console.log(
-          `Location updated for ${data.partnerId} [${data.lat}, ${data.lng}]`,
-        );
-      } catch (error) {
-        console.error("Failed to update location:", error);
-      }
-    },
-  );
+  // 2. Authenticate & Register User (Rider)
+  socket.on("register_user", (userId: string) => {
+    socket.join(`user_${userId}`);
+    console.log(`User ${userId} registered with socket ${socket.id}`);
+  });
 
-  // 3. Handle Disconnection
+  // 3. Receive Live Location Updates
+  socket.on("update_location", async (data: { partnerId: string; lat: number; lng: number }) => {
+    try {
+      await prisma.user.update({
+        where: { id: data.partnerId },
+        data: {
+          location: { type: "Point", coordinates: [data.lng, data.lat] },
+        },
+      });
+    } catch (error) {
+      console.error("Failed to update location:", error);
+    }
+  });
+
+  // User requests a ride -> Forward to specific Partner
+  socket.on("new_ride_request", (data) => {
+    console.log(`Forwarding ride request to Partner: ${data.partnerId}`);
+    io.to(`partner_${data.partnerId}`).emit("new_ride_request", data);
+  });
+
+  // User cancels request -> Forward to specific Partner
+  socket.on("ride_cancelled", (data) => {
+    console.log(`Forwarding cancellation to Partner: ${data.partnerId}`);
+    io.to(`partner_${data.partnerId}`).emit("ride_cancelled", data);
+  });
+
+  // Partner accepts ride -> Forward to specific User
+  socket.on("ride_accepted", (data) => {
+    console.log(`Forwarding acceptance to User: ${data.userId}`);
+    io.to(`user_${data.userId}`).emit("ride_accepted", data);
+  });
+
+  // Partner rejects ride -> Forward to specific User
+  socket.on("ride_rejected", (data) => {
+    console.log(`Forwarding rejection to User: ${data.userId}`);
+    io.to(`user_${data.userId}`).emit("ride_rejected", data);
+  });
+
+  // Handle Disconnection
   socket.on("disconnect", async () => {
     console.log(`Client disconnected: ${socket.id}`);
     try {
-      const user = await prisma.user.findFirst({
-        where: { socketId: socket.id },
-      });
+      const user = await prisma.user.findFirst({ where: { socketId: socket.id } });
       if (user) {
         await prisma.user.update({
           where: { id: user.id },
           data: {
-            isOnline: false,
-            socketId: null,
-            location: {
-              type: "Point",
-              coordinates: [null, null], // GeoJSON format requires [longitude, latitude]
-            },
+            isOnline: false, socketId: null,
+            location: { type: "Point", coordinates: [null, null] },
           },
         });
-        console.log(`Partner ${user.id} marked offline and location wiped`);
       }
     } catch (error) {
       console.error("Disconnect handling failed:", error);
