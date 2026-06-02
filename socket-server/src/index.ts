@@ -109,6 +109,12 @@ io.on("connection", (socket: Socket) => {
     },
   );
 
+  // 5. Generic Ride State Updater
+  socket.on("ride_updated", (data: { partnerId: string; userId: string }) => {
+    io.to(`user_${data.userId}`).emit("ride_updated");
+    io.to(`partner_${data.partnerId}`).emit("ride_updated");
+  });
+
   // User requests a ride -> Forward to specific Partner
   socket.on("new_ride_request", (data) => {
     console.log(`Forwarding ride request to Partner: ${data.partnerId}`);

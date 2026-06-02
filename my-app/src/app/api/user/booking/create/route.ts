@@ -77,11 +77,6 @@ export async function POST(req: NextRequest) {
     const adminComission = parseFloat((numericFare * 0.2).toFixed(2));
     const partnerAmount = parseFloat((numericFare * 0.8).toFixed(2));
 
-    // Generate PickUp OTP
-    const pickUpOtp = generateOTP();
-    // Expiration set to 1 hour from now
-    const pickupOtpExpire = new Date(Date.now() + 60 * 60 * 1000);
-
     const newBooking = await prisma.booking.create({
       data: {
         userId: userId,
@@ -104,8 +99,6 @@ export async function POST(req: NextRequest) {
         partnerMobileNumber: partner.phone || "Not Provided",
         bookingStatus: "REQUESTED",
         paymentStatus: "PENDING",
-        pickUpOtp,
-        pickupOtpExpire,
       },
     });
 
