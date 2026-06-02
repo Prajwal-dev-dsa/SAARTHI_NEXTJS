@@ -95,6 +95,8 @@ model User {
   bankDetails            PartnerBankDetail?
   userBookings           Booking[]          @relation("UserBookings")
   partnerBookings        Booking[]          @relation("PartnerBookings")
+  sentMessages           Message[]          @relation("SentMessages")
+  receivedMessages       Message[]          @relation("ReceivedMessages")
 
   @@map("users")
 }
@@ -179,9 +181,28 @@ model Booking {
   dropOtpExpire       DateTime?
   created_at          DateTime      @default(now())
   updated_at          DateTime      @updatedAt
+  messages            Message[]
 
   @@index([userId])
   @@index([partnerId])
   @@index([bookingStatus])
   @@map("bookings")
+}
+
+model Message {
+  id         String   @id @default(cuid())
+  bookingId  String
+  booking    Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  senderId   String
+  sender     User     @relation("SentMessages", fields: [senderId], references: [id])
+  receiverId String
+  receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id])
+  content    String   @db.Text
+  isRead     Boolean  @default(false)
+  created_at DateTime @default(now())
+
+  @@index([bookingId])
+  @@index([senderId])
+  @@index([receiverId])
+  @@map("messages")
 }

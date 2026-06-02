@@ -6,8 +6,9 @@ import { motion } from "framer-motion";
 import dynamic from "next/dynamic";
 import axios from "axios";
 import { io, Socket } from "socket.io-client";
-import { Clock, Phone, Car, Loader2 } from "lucide-react";
+import { Clock, Phone, Car, Loader2, MessageSquare } from "lucide-react";
 import { STATUS_LABEL } from "@/lib/rideStatuses";
+import RideChat from "@/components/RideChat";
 
 const ActiveRideMap = dynamic(() => import("@/components/ActiveRideMap"), { ssr: false });
 
@@ -21,6 +22,8 @@ export default function UserActiveRide() {
 
     const [socket, setSocket] = useState<Socket | null>(null);
     const [liveDriverLoc, setLiveDriverLoc] = useState<{ lat: number, lng: number } | null>(null);
+
+    const [isChatOpen, setIsChatOpen] = useState(false);
 
     // 1. Fetch initial booking details & start polling
     useEffect(() => {
@@ -47,26 +50,27 @@ export default function UserActiveRide() {
         return () => clearInterval(interval);
     }, [bookingId, router]);
 
-    // 2. Listen to Live Socket GPS Updates from the Driver!
+    // 2. Listen to Live Socket GPS Updates & Register for Chat!
     useEffect(() => {
-        if (!booking?.partnerId) return;
+        if (!booking?.partnerId || !booking?.userId) return;
 
         const socketUrl = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || "http://localhost:8000";
         const newSocket = io(socketUrl);
         setSocket(newSocket);
 
-        newSocket.on("connect", () => console.log("Rider Tracking Socket Connected"));
+        newSocket.on("connect", () => {
+            console.log("Rider Tracking Socket Connected");
+            newSocket.emit("register_user", booking.userId);
+        });
 
-        // When the server bounces the driver's location, catch it here
         newSocket.on("driver_location_updated", (data) => {
-            // Ensure we are only tracking OUR driver, not someone else's!
             if (data.partnerId === booking.partnerId) {
                 setLiveDriverLoc({ lat: data.lat, lng: data.lng });
             }
         });
 
         return () => { newSocket.disconnect(); };
-    }, [booking?.partnerId]);
+    }, [booking?.partnerId, booking?.userId]);
 
 
     if (isLoading || !booking) {
@@ -93,7 +97,6 @@ export default function UserActiveRide() {
         return <div className="p-10 text-center text-red-500 font-bold">Location data corrupted for this booking.</div>;
     }
 
-    // priority: 1. Live Socket GPS -> 2. Initial DB GPS -> 3. Fallback to Pickup
     const safeDriverLoc = liveDriverLoc || initialDriverLoc || pickupLoc;
 
     return (
@@ -120,51 +123,69 @@ export default function UserActiveRide() {
                     </div>
                 </div>
 
-                <div className="flex-1 p-6 overflow-y-auto">
-
-                    <div className="grid grid-cols-2 gap-4 mb-6">
-                        <div className="bg-gray-50 dark:bg-[#111] border border-gray-100 dark:border-gray-800 rounded-2xl p-4 flex items-center gap-4">
-                            <Clock className="w-5 h-5 text-gray-400" />
-                            <div>
-                                <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">ETA</p>
-                                <p className="font-black text-lg text-black dark:text-white">-- min</p>
-                            </div>
-                        </div>
-                        <div className="bg-black dark:bg-[#111] border border-black dark:border-gray-800 rounded-2xl p-4 flex items-center gap-4 text-white">
-                            <span className="text-lg text-gray-400 font-black">₹</span>
-                            <div>
-                                <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Total Fare</p>
-                                <p className="font-black text-lg text-white">{booking.fare}</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Driver Card */}
-                    <div className="bg-black dark:bg-[#111] rounded-3xl p-5 border border-gray-100 dark:border-gray-800 text-white shadow-lg mb-6">
-                        <div className="flex items-center gap-4 mb-4">
-                            <div className="relative">
-                                <div className="w-14 h-14 bg-gray-800 rounded-2xl flex items-center justify-center">
-                                    <Car className="w-6 h-6 text-gray-400" />
+                <div className="flex-1 p-6 overflow-y-auto flex flex-col justify-between">
+                    <div>
+                        <div className="grid grid-cols-2 gap-4 mb-6">
+                            <div className="bg-gray-50 dark:bg-[#111] border border-gray-100 dark:border-gray-800 rounded-2xl p-4 flex items-center gap-4">
+                                <Clock className="w-5 h-5 text-gray-400" />
+                                <div>
+                                    <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">ETA</p>
+                                    <p className="font-black text-lg text-black dark:text-white">-- min</p>
                                 </div>
                             </div>
-                            <div className="flex-1">
-                                <h3 className="font-black text-lg capitalize">{booking.partner?.name || "Driver"}</h3>
-                                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">{booking.vehicle?.model}</p>
+                            <div className="bg-black dark:bg-[#111] border border-black dark:border-gray-800 rounded-2xl p-4 flex items-center gap-4 text-white">
+                                <span className="text-lg text-gray-400 font-black">₹</span>
+                                <div>
+                                    <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Total Fare</p>
+                                    <p className="font-black text-lg text-white">{booking.fare}</p>
+                                </div>
                             </div>
                         </div>
-                        <div className="bg-gray-900 rounded-xl py-3 text-center text-sm font-black tracking-widest uppercase">
-                            {booking.vehicle?.vehicleNumber}
+
+                        {/* Driver Card */}
+                        <div className="bg-black dark:bg-[#111] rounded-3xl p-5 border border-gray-100 dark:border-gray-800 text-white shadow-lg mb-6">
+                            <div className="flex items-center gap-4 mb-4">
+                                <div className="relative">
+                                    <div className="w-14 h-14 bg-gray-800 rounded-2xl flex items-center justify-center">
+                                        <Car className="w-6 h-6 text-gray-400" />
+                                    </div>
+                                </div>
+                                <div className="flex-1">
+                                    <h3 className="font-black text-lg capitalize">{booking.partner?.name || "Driver"}</h3>
+                                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">{booking.vehicle?.model}</p>
+                                </div>
+                            </div>
+                            <div className="bg-gray-900 rounded-xl py-3 text-center text-sm font-black tracking-widest uppercase">
+                                {booking.vehicle?.vehicleNumber}
+                            </div>
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1">
+                    {/* Action Buttons */}
+                    <div className="grid grid-cols-2 gap-4 mt-auto">
                         <button onClick={() => window.open(`tel:${booking.partnerMobileNumber}`)} className="bg-gray-50 dark:bg-[#111] border border-gray-100 dark:border-gray-800 text-black dark:text-white font-bold py-4 rounded-2xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors flex items-center justify-center gap-2">
-                            <Phone className="w-4 h-4" /> Call Driver
+                            <Phone className="w-4 h-4" /> Call
+                        </button>
+                        <button onClick={() => setIsChatOpen(true)} className="bg-black dark:bg-white text-white dark:text-black font-bold py-4 rounded-2xl hover:scale-105 transition-transform flex items-center justify-center gap-2">
+                            <MessageSquare className="w-4 h-4" /> Message
                         </button>
                     </div>
 
                 </div>
             </div>
+
+            {/* Chat Modal Component */}
+            <RideChat
+                isOpen={isChatOpen}
+                onClose={() => setIsChatOpen(false)}
+                bookingId={booking.id}
+                currentUserId={booking.userId}
+                otherUserId={booking.partnerId}
+                otherUserName={booking.partner?.name || "Driver"}
+                role="USER"
+                socket={socket}
+            />
+
         </main>
     );
 }

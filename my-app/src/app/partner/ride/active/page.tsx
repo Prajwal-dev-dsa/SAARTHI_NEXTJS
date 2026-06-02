@@ -5,8 +5,12 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import dynamic from "next/dynamic";
 import axios from "axios";
+import { useSelector } from "react-redux";
+import { RootState } from "@/store";
 import { Clock, Phone, MessageSquare, User, Loader2 } from "lucide-react";
 import { STATUS_LABEL } from "@/lib/rideStatuses";
+import RideChat from "@/components/RideChat";
+import { io, Socket } from "socket.io-client";
 
 const ActiveRideMap = dynamic(() => import("@/components/ActiveRideMap"), { ssr: false });
 
@@ -14,10 +18,14 @@ export default function PartnerActiveRide() {
     const searchParams = useSearchParams();
     const router = useRouter();
     const bookingId = searchParams.get("id");
+    const { user } = useSelector((state: RootState) => state.auth);
 
     const [booking, setBooking] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [liveDriverLoc, setLiveDriverLoc] = useState<{ lat: number, lng: number } | null>(null);
+    const [socket, setSocket] = useState<Socket | null>(null);
+
+    const [isChatOpen, setIsChatOpen] = useState(false);
 
     // 1. Fetch initial booking details
     useEffect(() => {
@@ -39,6 +47,20 @@ export default function PartnerActiveRide() {
 
         fetchRideDetails();
     }, [bookingId, router]);
+
+    // Setup Socket for Chat Connection
+    useEffect(() => {
+        if (!user?.id) return;
+        const socketUrl = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || "http://localhost:8000";
+        const newSocket = io(socketUrl);
+
+        newSocket.on("connect", () => {
+            newSocket.emit("register_partner", user.id);
+        });
+
+        setSocket(newSocket);
+        return () => { newSocket.disconnect(); };
+    }, [user?.id]);
 
     useEffect(() => {
         if (!navigator.geolocation) return;
@@ -109,51 +131,66 @@ export default function PartnerActiveRide() {
                     </div>
                 </div>
 
-                <div className="flex-1 p-6 overflow-y-auto">
-                    <div className="grid grid-cols-2 gap-4 mb-6">
-                        <div className="bg-gray-50 dark:bg-[#111] border border-gray-100 dark:border-gray-800 rounded-2xl p-4 flex items-center gap-4">
-                            <Clock className="w-5 h-5 text-gray-400" />
-                            <div>
-                                <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">ETA</p>
-                                <p className="font-black text-lg text-black dark:text-white">-- min</p>
+                <div className="flex-1 p-6 overflow-y-auto flex flex-col justify-between">
+                    <div>
+                        <div className="grid grid-cols-2 gap-4 mb-6">
+                            <div className="bg-gray-50 dark:bg-[#111] border border-gray-100 dark:border-gray-800 rounded-2xl p-4 flex items-center gap-4">
+                                <Clock className="w-5 h-5 text-gray-400" />
+                                <div>
+                                    <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">ETA</p>
+                                    <p className="font-black text-lg text-black dark:text-white">-- min</p>
+                                </div>
+                            </div>
+                            <div className="bg-black dark:bg-[#111] border border-black dark:border-gray-800 rounded-2xl p-4 flex items-center gap-4 text-white">
+                                <span className="text-lg text-gray-400 font-black">₹</span>
+                                <div>
+                                    <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Your Fare</p>
+                                    <p className="font-black text-lg text-white">{booking.partnerAmount}</p>
+                                </div>
                             </div>
                         </div>
-                        <div className="bg-black dark:bg-[#111] border border-black dark:border-gray-800 rounded-2xl p-4 flex items-center gap-4 text-white">
-                            <span className="text-lg text-gray-400 font-black">₹</span>
-                            <div>
-                                <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Your Fare</p>
-                                <p className="font-black text-lg text-white">{booking.partnerAmount}</p>
+
+                        <div className="bg-black dark:bg-[#111] rounded-3xl p-5 border border-gray-100 dark:border-gray-800 text-white shadow-lg mb-6">
+                            <div className="flex items-center gap-4">
+                                <div className="relative">
+                                    <div className="w-14 h-14 bg-gray-800 rounded-2xl flex items-center justify-center">
+                                        <User className="w-6 h-6 text-gray-400" />
+                                    </div>
+                                    <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-black rounded-full" />
+                                </div>
+                                <div className="flex-1">
+                                    <h3 className="font-black text-lg capitalize">{booking.user?.name || "Rider"}</h3>
+                                    <div className="bg-white text-black text-[10px] font-black px-2 py-0.5 rounded uppercase w-max mt-1 tracking-wider">
+                                        {booking.paymentStatus === "CASH" ? "Cash Ride" : "Paid Online"}
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <div className="bg-black dark:bg-[#111] rounded-3xl p-5 border border-gray-100 dark:border-gray-800 text-white shadow-lg mb-6">
-                        <div className="flex items-center gap-4">
-                            <div className="relative">
-                                <div className="w-14 h-14 bg-gray-800 rounded-2xl flex items-center justify-center">
-                                    <User className="w-6 h-6 text-gray-400" />
-                                </div>
-                                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-black rounded-full" />
-                            </div>
-                            <div className="flex-1">
-                                <h3 className="font-black text-lg capitalize">{booking.user?.name || "Rider"}</h3>
-                                <div className="bg-white text-black text-[10px] font-black px-2 py-0.5 rounded uppercase w-max mt-1 tracking-wider">
-                                    {booking.paymentStatus === "CASH" ? "Cash Ride" : "Paid Online"}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-2 gap-4 mt-auto">
                         <button onClick={() => window.open(`tel:${booking.userMobileNumber}`)} className="bg-gray-50 dark:bg-[#111] border border-gray-100 dark:border-gray-800 text-black dark:text-white font-bold py-4 rounded-2xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors flex items-center justify-center gap-2">
                             <Phone className="w-4 h-4" /> Call
                         </button>
-                        <button className="bg-black dark:bg-white text-white dark:text-black font-bold py-4 rounded-2xl hover:scale-105 transition-transform flex items-center justify-center gap-2">
-                            Message
+                        <button onClick={() => setIsChatOpen(true)} className="bg-black dark:bg-white text-white dark:text-black font-bold py-4 rounded-2xl hover:scale-105 transition-transform flex items-center justify-center gap-2">
+                            <MessageSquare className="w-4 h-4" /> Message
                         </button>
                     </div>
                 </div>
             </div>
+
+            {/* Chat Modal Component */}
+            <RideChat
+                isOpen={isChatOpen}
+                onClose={() => setIsChatOpen(false)}
+                bookingId={booking.id}
+                currentUserId={user?.id || ""}
+                otherUserId={booking.userId}
+                otherUserName={booking.user?.name || "Rider"}
+                role="PARTNER"
+                socket={socket}
+            />
+
         </main>
     );
 }

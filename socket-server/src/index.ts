@@ -71,6 +71,44 @@ io.on("connection", (socket: Socket) => {
     },
   );
 
+  // 4. Handle Real-Time Chat Messages
+  socket.on(
+    "send_message",
+    async (data: {
+      bookingId: string;
+      senderId: string;
+      receiverId: string;
+      content: string;
+      senderRole: string; // "USER" or "PARTNER"
+    }) => {
+      try {
+        const newMessage = await prisma.message.create({
+          data: {
+            bookingId: data.bookingId,
+            senderId: data.senderId,
+            receiverId: data.receiverId,
+            content: data.content,
+          },
+        });
+
+        const receiverRoom =
+          data.senderRole === "USER"
+            ? `partner_${data.receiverId}`
+            : `user_${data.receiverId}`;
+
+        const senderRoom =
+          data.senderRole === "USER"
+            ? `user_${data.senderId}`
+            : `partner_${data.senderId}`;
+
+        io.to(receiverRoom).emit("receive_message", newMessage);
+        io.to(senderRoom).emit("receive_message", newMessage);
+      } catch (error) {
+        console.error("Failed to process chat message:", error);
+      }
+    },
+  );
+
   // User requests a ride -> Forward to specific Partner
   socket.on("new_ride_request", (data) => {
     console.log(`Forwarding ride request to Partner: ${data.partnerId}`);
