@@ -35,24 +35,41 @@ io.on("connection", (socket: Socket) => {
   });
 
   // 2. Authenticate & Register User (Rider)
-  socket.on("register_user", (userId: string) => {
-    socket.join(`user_${userId}`);
-    console.log(`User ${userId} registered with socket ${socket.id}`);
-  });
-
-  // 3. Receive Live Location Updates
-  socket.on("update_location", async (data: { partnerId: string; lat: number; lng: number }) => {
+  socket.on("register_user", async (userId: string) => {
     try {
       await prisma.user.update({
-        where: { id: data.partnerId },
-        data: {
-          location: { type: "Point", coordinates: [data.lng, data.lat] },
-        },
+        where: { id: userId },
+        data: { socketId: socket.id, isOnline: true },
       });
+      socket.join(`user_${userId}`);
+      console.log(`User ${userId} registered with socket ${socket.id}`);
     } catch (error) {
-      console.error("Failed to update location:", error);
+      console.error("Failed to register user:", error);
     }
   });
+
+  // 3. Receive Live Location Updates (For BOTH Partners and Users)
+  socket.on(
+    "update_location",
+    async (data: { userId: string; lat: number; lng: number }) => {
+      try {
+        await prisma.user.update({
+          where: { id: data.userId },
+          data: {
+            location: { type: "Point", coordinates: [data.lng, data.lat] },
+          },
+        });
+
+        io.emit("driver_location_updated", {
+          partnerId: data.userId,
+          lat: data.lat,
+          lng: data.lng,
+        });
+      } catch (error) {
+        console.error("Failed to update location:", error);
+      }
+    },
+  );
 
   // User requests a ride -> Forward to specific Partner
   socket.on("new_ride_request", (data) => {
@@ -78,22 +95,19 @@ io.on("connection", (socket: Socket) => {
     io.to(`user_${data.userId}`).emit("ride_rejected", data);
   });
 
-  // Handle Disconnection
+  // 3. Handle Disconnection
   socket.on("disconnect", async () => {
     console.log(`Client disconnected: ${socket.id}`);
     try {
-      const user = await prisma.user.findFirst({ where: { socketId: socket.id } });
-      if (user) {
-        await prisma.user.update({
-          where: { id: user.id },
-          data: {
-            isOnline: false, socketId: null,
-            location: { type: "Point", coordinates: [null, null] },
-          },
-        });
-      }
-    } catch (error) {
-      console.error("Disconnect handling failed:", error);
+      await prisma.user.updateMany({
+        where: { socketId: socket.id },
+        data: {
+          isOnline: false,
+          socketId: null,
+        },
+      });
+    } catch (error: any) {
+      console.error("Disconnect handling failed:", error.message);
     }
   });
 });
