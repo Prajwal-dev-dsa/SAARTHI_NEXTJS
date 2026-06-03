@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { Suspense, useEffect, useState, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import dynamic from "next/dynamic";
@@ -15,7 +15,7 @@ import { io, Socket } from "socket.io-client";
 
 const ActiveRideMap = dynamic(() => import("@/components/ActiveRideMap"), { ssr: false });
 
-export default function PartnerActiveRide() {
+function PartnerActiveRideContent() {
     const searchParams = useSearchParams();
     const router = useRouter();
     const bookingId = searchParams.get("id");
@@ -147,7 +147,6 @@ export default function PartnerActiveRide() {
 
     return (
         <main className="h-screen w-full flex flex-col lg:flex-row bg-gray-50 dark:bg-[#050505] font-sans overflow-hidden">
-
             {/* MAP SECTION */}
             {!isCompleted && (
                 <div className="flex-1 relative h-[50vh] lg:h-full">
@@ -163,7 +162,6 @@ export default function PartnerActiveRide() {
 
             {/* PANEL SECTION */}
             <div className={`${isCompleted ? "w-full" : "w-full lg:w-[450px]"} h-[50vh] lg:h-full bg-white dark:bg-[#0a0a0a] flex flex-col shadow-2xl z-20 transition-all duration-500`}>
-
                 {isCompleted ? (
                     // --- COMPLETED RIDE RECEIPT UI ---
                     <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex-1 flex flex-col items-center justify-center p-8 text-center max-w-lg mx-auto w-full">
@@ -247,7 +245,6 @@ export default function PartnerActiveRide() {
 
                             {/* --- DYNAMIC OTP ACTIONS SECTION --- */}
                             <AnimatePresence mode="wait">
-
                                 {/* 1. SHOW SEND BUTTON BEFORE PICKUP */}
                                 {booking.bookingStatus === "CONFIRMED" && !booking.pickUpOtp && (
                                     <motion.button key="pickup-send" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
@@ -336,5 +333,13 @@ export default function PartnerActiveRide() {
 
             {!isCompleted && <RideChat isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} bookingId={booking.id} currentUserId={user?.id || ""} otherUserId={booking.userId} otherUserName={booking.user?.name || "Rider"} role="PARTNER" socket={socket} />}
         </main>
+    );
+}
+
+export default function PartnerActiveRide() {
+    return (
+        <Suspense fallback={<div className="h-screen w-full flex items-center justify-center bg-gray-50 dark:bg-[#050505]"><Loader2 className="w-8 h-8 animate-spin text-black dark:text-white" /></div>}>
+            <PartnerActiveRideContent />
+        </Suspense>
     );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, Variants, AnimatePresence } from "framer-motion";
 import axios from "axios";
@@ -28,7 +28,7 @@ const loadRazorpayScript = () => {
     });
 };
 
-export default function CheckoutPage() {
+function CheckoutContent() {
     const searchParams = useSearchParams();
     const router = useRouter();
     const { showAlert } = useAlert();
@@ -513,5 +513,17 @@ export default function CheckoutPage() {
                 </div>
             </motion.div>
         </main>
+    );
+}
+
+export default function CheckoutPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-gray-50 dark:bg-[#050505] flex items-center justify-center">
+                <Loader2 className="w-10 h-10 animate-spin text-black dark:text-white" />
+            </div>
+        }>
+            <CheckoutContent />
+        </Suspense>
     );
 }

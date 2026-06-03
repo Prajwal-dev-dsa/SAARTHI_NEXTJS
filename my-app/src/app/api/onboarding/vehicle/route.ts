@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
     });
 
     // DB Transaction execution wrapper block
-    const operationalResult = await prisma.$transaction(async (tx) => {
+    const operationalResult = await prisma.$transaction(async (tx: any) => {
       let vehicleRecord;
 
       if (existingUserVehicle) {
@@ -124,7 +124,6 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      // Explicitly escalate internal state lifecycle configuration track counter flags directly on core user profiles
       await tx.user.update({
         where: { id: session.user.id },
         data: { partnerOnboardingSteps: 1 },

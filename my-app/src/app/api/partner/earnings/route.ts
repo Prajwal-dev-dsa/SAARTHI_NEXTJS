@@ -22,7 +22,8 @@ export async function GET(req: NextRequest) {
       select: { updated_at: true, partnerAmount: true },
     });
 
-    const daysMap = new Map();
+    const daysMap = new Map<string, { date: string; amount: number }>();
+
     for (let i = 6; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
@@ -33,18 +34,22 @@ export async function GET(req: NextRequest) {
       daysMap.set(dateStr, { date: dateStr, amount: 0 });
     }
 
-    bookings.forEach((b) => {
+    bookings.forEach((b: { updated_at: Date; partnerAmount: number }) => {
       const dateStr = b.updated_at.toLocaleDateString("en-IN", {
         day: "numeric",
         month: "short",
       });
       if (daysMap.has(dateStr)) {
-        daysMap.get(dateStr).amount += b.partnerAmount;
+        const existing = daysMap.get(dateStr)!;
+        existing.amount += b.partnerAmount;
       }
     });
 
     const chartData = Array.from(daysMap.values());
-    const total = chartData.reduce((sum, item) => sum + item.amount, 0);
+    const total = chartData.reduce(
+      (sum, item: { amount: number }) => sum + item.amount,
+      0,
+    );
     const avg = total / 7;
     const todayStr = new Date().toLocaleDateString("en-IN", {
       day: "numeric",
@@ -53,7 +58,7 @@ export async function GET(req: NextRequest) {
     const todayAmount = daysMap.get(todayStr)?.amount || 0;
 
     let bestDay = chartData[0];
-    chartData.forEach((day) => {
+    chartData.forEach((day: { date: string; amount: number }) => {
       if (day.amount > bestDay.amount) bestDay = day;
     });
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import dynamic from "next/dynamic";
@@ -12,7 +12,7 @@ import RideChat from "@/components/RideChat";
 
 const ActiveRideMap = dynamic(() => import("@/components/ActiveRideMap"), { ssr: false });
 
-export default function UserActiveRide() {
+function UserActiveRideContent() {
     const searchParams = useSearchParams();
     const router = useRouter();
     const bookingId = searchParams.get("id");
@@ -53,7 +53,6 @@ export default function UserActiveRide() {
 
         return () => { newSocket.disconnect(); };
     }, [booking?.partnerId, booking?.userId]);
-
 
     if (isLoading || !booking) return <div className="h-screen w-full flex items-center justify-center bg-gray-50 dark:bg-[#050505]"><Loader2 className="w-8 h-8 animate-spin text-black dark:text-white" /></div>;
 
@@ -216,5 +215,13 @@ export default function UserActiveRide() {
 
             {!isCompleted && <RideChat isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} bookingId={booking.id} currentUserId={booking.userId} otherUserId={booking.partnerId} otherUserName={booking.partner?.name || "Driver"} role="USER" socket={socket} />}
         </main>
+    );
+}
+
+export default function UserActiveRide() {
+    return (
+        <Suspense fallback={<div className="h-screen w-full flex items-center justify-center bg-gray-50 dark:bg-[#050505]"><Loader2 className="w-8 h-8 animate-spin text-black dark:text-white" /></div>}>
+            <UserActiveRideContent />
+        </Suspense>
     );
 }

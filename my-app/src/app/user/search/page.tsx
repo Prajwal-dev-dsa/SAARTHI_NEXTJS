@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import dynamic from "next/dynamic";
 import axios from "axios";
-import { ArrowLeft, Navigation, MapPin, Search, RefreshCw, Star, Zap, ArrowRight } from "lucide-react";
+import { ArrowLeft, Navigation, MapPin, Search, RefreshCw, Star, Zap, ArrowRight, Loader2 } from "lucide-react";
 import { useAlert } from "@/context/AlertContext";
 
 const Map = dynamic(() => import("../../../components/MapComponent"), { ssr: false });
@@ -14,7 +14,7 @@ const VEHICLE_SPEEDS: Record<string, number> = {
     Bike: 25, Auto: 20, Car: 30, Loading: 20, Truck: 15,
 };
 
-export default function SearchPage() {
+function SearchPageContent() {
     const searchParams = useSearchParams();
     const router = useRouter();
     const { showAlert } = useAlert();
@@ -248,7 +248,7 @@ export default function SearchPage() {
                                 </div>
                             </div>
 
-                            {/* Horizontal Scroll Cards (Kept intact) */}
+                            {/* Horizontal Scroll Cards */}
                             <div className="flex gap-4 overflow-x-auto hide-scrollbar pb-4 -mx-6 px-6 snap-x snap-mandatory">
                                 {availableDrivers.map((driver) => {
                                     const imageToUse = driver.leftImageUrl || driver.rightImageUrl || "https://images.unsplash.com/photo-1558981403-c5f9899a28bc?q=80&w=600&auto=format&fit=crop";
@@ -260,7 +260,6 @@ export default function SearchPage() {
                                             {/* Image & Badges */}
                                             <div className="relative h-40 bg-gray-50 dark:bg-gray-900 rounded-2xl flex items-center justify-center overflow-hidden border border-gray-100 dark:border-gray-800">
 
-                                                {/* Dark gradient overlay so the white text badges always pop, regardless of the photo's colors */}
                                                 <div className="absolute inset-0 bg-linear-to-b from-black/40 via-transparent to-transparent z-10" />
 
                                                 <div className="absolute top-3 left-3 bg-white/90 dark:bg-black/90 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 px-2 py-1 rounded-lg flex items-center gap-1 shadow-sm z-20">
@@ -331,5 +330,17 @@ export default function SearchPage() {
                 .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
             `}} />
         </main>
+    );
+}
+
+export default function SearchPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-gray-50 dark:bg-[#050505] flex items-center justify-center">
+                <Loader2 className="w-10 h-10 animate-spin text-black dark:text-white" />
+            </div>
+        }>
+            <SearchPageContent />
+        </Suspense>
     );
 }

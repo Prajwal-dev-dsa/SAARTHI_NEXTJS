@@ -47,7 +47,7 @@ export async function POST(req: Request) {
     const MAX_DISTANCE_KM = 10;
 
     // 2. Manually filter them so we can log EXACTLY why someone fails
-    onlinePartners.forEach((partner) => {
+    onlinePartners.forEach((partner: any) => {
       // Check Location
       const loc = partner.location as { coordinates?: [number, number] } | null;
       if (!loc || !loc.coordinates) {
@@ -57,7 +57,7 @@ export async function POST(req: Request) {
 
       // Check Vehicles
       const matchingVehicle = partner.vehicles.find(
-        (v) => v.type === vehicleType.toUpperCase(),
+        (v: any) => v.type === vehicleType.toUpperCase(),
       );
       if (!matchingVehicle) {
         console.log(

@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Database Transaction: Upsert Documents AND Update User Step
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: any) => {
       // Upsert will CREATE if it doesn't exist, or UPDATE if it does (based on ownerId)
       const docs = await tx.partnerDocument.upsert({
         where: { ownerId: session.user.id },

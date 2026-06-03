@@ -120,7 +120,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 5. Database Transaction: Upsert Bank Details AND Update User
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: any) => {
       // Upsert the bank details
       const bankRecord = await tx.partnerBankDetail.upsert({
         where: { ownerId: session.user.id },
