@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import axios from "axios";
 import { useAlert } from "../../context/AlertContext";
+import EarningsChart from "@/components/EarningsChart";
 
 // --- TypeScript Interfaces ---
 interface DashboardMetrics {
@@ -44,6 +45,7 @@ export default function AdminDashboard() {
     const [isLoading, setIsLoading] = useState(true);
     const [activeTab, setActiveTab] = useState("reviews");
     const [isStartingCall, setIsStartingCall] = useState<string | null>(null);
+    const [earningsData, setEarningsData] = useState(null);
 
     // Profile Dropdown State
     const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -56,11 +58,13 @@ export default function AdminDashboard() {
         const fetchDashboardData = async () => {
             try {
                 // Fetch ALL THREE queues concurrently
-                const [dashRes, videoRes, vehicleRes] = await Promise.all([
+                const [dashRes, videoRes, vehicleRes, earningsRes] = await Promise.all([
                     axios.get("/api/admin/dashboard"),
                     axios.get("/api/admin/video-kyc"),
-                    axios.get("/api/admin/vehicle-queue")
+                    axios.get("/api/admin/vehicle-queue"),
+                    axios.get("/api/admin/earnings")
                 ]);
+                if (earningsRes.data) setEarningsData(earningsRes.data);
 
                 if (dashRes.data) {
                     setMetrics(dashRes.data.metrics);
@@ -224,6 +228,9 @@ export default function AdminDashboard() {
                         <StatCard title="Pending" value={metrics.pending} icon={Clock} colorClass="text-amber-600 dark:text-amber-400" bgClass="bg-amber-50 dark:bg-amber-900/20" />
                         <StatCard title="Rejected" value={metrics.rejected} icon={XCircle} colorClass="text-red-600 dark:text-red-400" bgClass="bg-red-50 dark:bg-red-900/20" />
                     </div>
+
+                    {/* SECTION 1.5: Earnings Chart */}
+                    <EarningsChart data={earningsData} title="Admin Dashboard" />
 
                     {/* SECTION 2: Tab Navigation */}
                     <motion.div variants={itemVariants} className="flex overflow-x-auto hide-scrollbar py-2">

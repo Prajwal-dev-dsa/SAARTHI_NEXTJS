@@ -13,6 +13,7 @@ import {
 import Navbar from "../Navbar";
 import axios from "axios";
 import { useAlert } from "../../context/AlertContext";
+import EarningsChart from "@/components/EarningsChart";
 
 const ONBOARDING_STEPS = [
   { id: 1, title: "Vehicle", url: "/partner/onboarding/vehicle" },
@@ -37,6 +38,7 @@ export default function PartnerDashboard() {
 
   const [mounted, setMounted] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
+  const [earningsData, setEarningsData] = useState(null);
 
   // --- PRICING MODAL STATES ---
   const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
@@ -50,7 +52,14 @@ export default function PartnerDashboard() {
     frontImageUrl: null, backImageUrl: null, leftImageUrl: null, rightImageUrl: null
   });
 
-  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    setMounted(true);
+    if (dbStep >= 7) { // Only fetch if they are Live
+      axios.get("/api/partner/earnings")
+        .then(res => setEarningsData(res.data))
+        .catch(console.error);
+    }
+  }, [dbStep]);
 
   const handleRetryKyc = async () => {
     setIsRetrying(true);
@@ -308,7 +317,7 @@ export default function PartnerDashboard() {
           {/* STEP 8: YOU ARE LIVE BANNER! */}
           {mounted && dbStep >= 7 && (
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3, type: "spring" }}>
-              <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900/50 rounded-4xl p-6 md:p-8 flex flex-col md:flex-row items-start md:items-center justify-between space-y-6 md:space-y-0 md:space-x-6 shadow-sm">
+              <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900/50 rounded-4xl p-6 md:p-8 flex flex-col md:flex-row items-start md:items-center justify-between space-y-6 md:space-y-0 md:space-x-6 shadow-sm mb-9">
                 <div className="flex items-start md:items-center space-x-6">
                   <div className="w-14 h-14 shrink-0 bg-green-100 dark:bg-green-900/40 rounded-full flex items-center justify-center">
                     <Rocket className="w-7 h-7 text-green-600 dark:text-green-500" />
@@ -325,6 +334,7 @@ export default function PartnerDashboard() {
                   <span>Go to Bookings</span><ArrowRight className="w-4 h-4" />
                 </button>
               </div>
+              <EarningsChart data={earningsData} title="Partner Dashboard" />
             </motion.div>
           )}
 
