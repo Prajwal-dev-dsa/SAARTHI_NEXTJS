@@ -8,12 +8,13 @@ import { RootState } from "../../store";
 import { setUser } from "../../store/authSlice";
 import {
   Check, Lock, Clock, AlertOctagon, ArrowRight, Video,
-  Loader2, AlertTriangle, UploadCloud, Rocket
+  Loader2, AlertTriangle, UploadCloud, Rocket, MapPin
 } from "lucide-react";
 import Navbar from "../Navbar";
 import axios from "axios";
 import { useAlert } from "../../context/AlertContext";
 import EarningsChart from "@/components/EarningsChart";
+import { io } from "socket.io-client";
 
 const ONBOARDING_STEPS = [
   { id: 1, title: "Vehicle", url: "/partner/onboarding/vehicle" },
@@ -40,6 +41,9 @@ export default function PartnerDashboard() {
   const [isRetrying, setIsRetrying] = useState(false);
   const [earningsData, setEarningsData] = useState(null);
 
+  // State for fetching the ongoing ride
+  const [activeBooking, setActiveBooking] = useState<any>(null);
+
   // --- PRICING MODAL STATES ---
   const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
   const [isFetchingPricing, setIsFetchingPricing] = useState(false);
@@ -52,14 +56,46 @@ export default function PartnerDashboard() {
     frontImageUrl: null, backImageUrl: null, leftImageUrl: null, rightImageUrl: null
   });
 
+  // Helper to fetch any active ride
+  const fetchActiveBooking = async () => {
+    try {
+      const res = await axios.get("/api/partner/bookings");
+      const bookings = res.data.bookings || [];
+      const current = bookings.find((b: any) => ["AWAITING_PAYMENT", "CONFIRMED", "STARTED"].includes(b.bookingStatus));
+      setActiveBooking(current || null);
+    } catch (error) {
+      console.error("Failed to fetch active booking");
+    }
+  };
+
   useEffect(() => {
     setMounted(true);
     if (dbStep >= 7) { // Only fetch if they are Live
       axios.get("/api/partner/earnings")
         .then(res => setEarningsData(res.data))
         .catch(console.error);
+
+      fetchActiveBooking();
     }
   }, [dbStep]);
+
+  // --- GLOBAL REQUEST LISTENER ---
+  useEffect(() => {
+    if (!user?.id) return;
+    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || "http://localhost:8000";
+    const newSocket = io(socketUrl);
+
+    newSocket.on("connect", () => newSocket.emit("register_partner", user.id));
+    newSocket.on("new_ride_request", () => {
+      showAlert("New ride request received! Check pending requests.", "success");
+    });
+
+    // Refresh active booking card instantly if user pays or cancels
+    newSocket.on("ride_updated", () => fetchActiveBooking());
+    newSocket.on("ride_cancelled", () => fetchActiveBooking());
+
+    return () => { newSocket.disconnect(); };
+  }, [user?.id, showAlert]);
 
   const handleRetryKyc = async () => {
     setIsRetrying(true);
@@ -143,9 +179,9 @@ export default function PartnerDashboard() {
   const progressPercentage = (Math.min(dbStep, ONBOARDING_STEPS.length - 1) / (ONBOARDING_STEPS.length - 1)) * 100;
 
   return (
-    <main className="min-h-screen bg-gray-50 dark:bg-[#050505] transition-colors duration-300 font-sans pb-20">
+    <main className="min-h-dvh bg-gray-50 dark:bg-[#050505] transition-colors duration-300 font-sans pb-20 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
 
-      <div className="bg-black text-white">
+      <div className="sticky top-0 z-50 pb-6 lg:pb-0 w-full bg-black text-white shadow-md">
         <Navbar onLoginClick={() => { }} />
       </div>
 
@@ -157,7 +193,7 @@ export default function PartnerDashboard() {
         </motion.div>
 
         {/* The Stepper Card */}
-        <div className="bg-white dark:bg-[#0a0a0a] border border-gray-200 dark:border-gray-900 rounded-4xl shadow-xl p-8 md:p-12 overflow-x-auto hide-scrollbar mb-8">
+        <div className="bg-white dark:bg-[#0a0a0a] border border-gray-200 dark:border-gray-900 rounded-4xl shadow-xl p-8 md:p-12 overflow-x-auto hide-scrollbar mb-8 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
           <div className="min-w-[800px] relative flex items-center justify-between mt-4 mb-8">
             <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1 bg-gray-100 dark:bg-gray-800 rounded-full z-0"></div>
             <div className="absolute left-0 top-1/2 -translate-y-1/2 h-1 rounded-full z-0 overflow-hidden w-full">
@@ -197,8 +233,6 @@ export default function PartnerDashboard() {
         </div>
 
         <AnimatePresence>
-
-          {/* STEP 4: DOCUMENT REVIEW ALERTS (Only shows if dbStep is exactly 3) */}
           {mounted && dbStep === 3 && (
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ delay: 0.5, type: "spring" }}>
               {partnerStatus === "PENDING" && (
@@ -227,7 +261,6 @@ export default function PartnerDashboard() {
             </motion.div>
           )}
 
-          {/* STEP 5: VIDEO KYC ALERTS (Shows for dbStep 4 or 5) */}
           {mounted && dbStep >= 4 && dbStep < 6 && (
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ delay: 0.3, type: "spring" }}>
 
@@ -283,7 +316,6 @@ export default function PartnerDashboard() {
             </motion.div>
           )}
 
-          {/* STEP 7: FINAL REVIEW ALERTS (Pending or Rejected) */}
           {mounted && dbStep === 6 && (
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3, type: "spring" }}>
 
@@ -314,10 +346,10 @@ export default function PartnerDashboard() {
             </motion.div>
           )}
 
-          {/* STEP 8: YOU ARE LIVE BANNER! */}
           {mounted && dbStep >= 7 && (
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3, type: "spring" }}>
-              <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900/50 rounded-4xl p-6 md:p-8 flex flex-col md:flex-row items-start md:items-center justify-between space-y-6 md:space-y-0 md:space-x-6 shadow-sm mb-9">
+
+              <div className={`bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900/50 rounded-4xl p-6 md:p-8 flex flex-col md:flex-row items-start md:items-center justify-between space-y-6 md:space-y-0 md:space-x-6 shadow-sm ${activeBooking ? "mb-6" : "mb-9"}`}>
                 <div className="flex items-start md:items-center space-x-6">
                   <div className="w-14 h-14 shrink-0 bg-green-100 dark:bg-green-900/40 rounded-full flex items-center justify-center">
                     <Rocket className="w-7 h-7 text-green-600 dark:text-green-500" />
@@ -334,6 +366,37 @@ export default function PartnerDashboard() {
                   <span>Go to Bookings</span><ArrowRight className="w-4 h-4" />
                 </button>
               </div>
+
+              {/* DYNAMIC YELLOW ACTIVE RIDE CARD */}
+              {activeBooking?.bookingStatus == "CONFIRMED" && (
+                <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 rounded-4xl p-6 md:p-8 flex flex-col md:flex-row items-start md:items-center justify-between space-y-6 md:space-y-0 md:space-x-6 shadow-sm mb-9 relative overflow-hidden">
+
+                  {/* Decorative yellow pulse accent strip */}
+                  <div className="absolute top-0 left-0 w-1 h-full bg-amber-500/50 dark:bg-amber-500/80" />
+
+                  <div className="flex items-start md:items-center space-x-6 relative z-10">
+                    <div className="w-14 h-14 shrink-0 bg-amber-100 dark:bg-amber-900/40 rounded-full flex items-center justify-center relative">
+                      <div className="absolute top-0 right-0 w-3 h-3 bg-amber-500 border-2 border-white dark:border-[#050505] rounded-full animate-bounce" />
+                      <MapPin className="w-7 h-7 text-amber-600 dark:text-amber-500" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-3 mb-1">
+                        <h3 className="text-lg font-bold text-amber-900 dark:text-amber-400">Active Ride Found!</h3>
+                      </div>
+                      <p className="text-amber-700 dark:text-amber-600/80 text-sm md:text-base leading-relaxed">
+                        You have an ongoing journey with <span className="font-bold text-amber-900 dark:text-amber-300">{activeBooking.user?.name || "Rider"}</span>.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => router.push(`/partner/ride/active?id=${activeBooking.id}`)}
+                    className="shrink-0 w-full md:w-auto bg-amber-500 hover:bg-amber-600 text-black font-bold py-3 px-8 rounded-xl transition-colors flex items-center justify-center space-x-2 shadow-lg relative z-10"
+                  >
+                    <span>Track Ride</span><ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+
               <EarningsChart data={earningsData} title="Partner Dashboard" />
             </motion.div>
           )}
@@ -355,7 +418,6 @@ export default function PartnerDashboard() {
               </div>
 
               <div className="p-6 overflow-y-auto space-y-8 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-
                 {isFetchingPricing ? (
                   <div className="flex justify-center py-10"><Loader2 className="w-8 h-8 animate-spin text-black dark:text-white" /></div>
                 ) : (
@@ -393,11 +455,7 @@ export default function PartnerDashboard() {
                                 if (e.target.files && e.target.files[0]) {
                                   const file = e.target.files[0];
                                   const fakeUrl = URL.createObjectURL(file);
-
-                                  // Save the string for UI preview
                                   setPricingData({ ...pricingData, [imgField.key]: fakeUrl });
-
-                                  // Save the actual File object for the Axios upload
                                   setPricingFiles({ ...pricingFiles, [imgField.key]: file });
                                 }
                               }}

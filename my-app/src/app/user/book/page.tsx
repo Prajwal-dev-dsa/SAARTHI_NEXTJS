@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
+import { useSelector } from "react-redux";
+import { RootState } from "@/store";
 import {
     ArrowLeft, Bike, Car, Truck, Package,
     MapPin, CheckCircle2, Loader2,
@@ -82,61 +84,24 @@ export default function BookRidePage() {
     // Image Slider State
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
-    // --- Progress Calculation (The 4 Dots) ---
+    // --- Progress Calculation ---
     const isMobileValid = mobile.length === 10 && /^[6-9]\d{9}$/.test(mobile);
-
-    const progressCount = [
-        !!selectedVehicle,
-        isMobileValid,
-        !!originData,
-        !!destData
-    ].filter(Boolean).length;
-
-    // --- Helper: Extract State from Photon Properties ---
-    const extractState = (props: any) => {
-        return (props.state || props.county || "unknown").toLowerCase().trim();
-    };
-
-    const formatAddress = (props: any) => {
-        return [props.name, props.street, props.city, props.state].filter(Boolean).join(", ");
-    };
+    const progressCount = [!!selectedVehicle, isMobileValid, !!originData, !!destData].filter(Boolean).length;
 
     // --- Background Image Slider Hook ---
     useEffect(() => {
         const interval = setInterval(() => {
             setCurrentImageIndex((prevIndex) => (prevIndex + 1) % SLIDER_IMAGES.length);
-        }, 3000); // Change image every 3 seconds
-
+        }, 3000);
         return () => clearInterval(interval);
     }, []);
 
-    // --- Debounced Search for Photon API ---
+    // --- On Mount: Auto-Fetch Current Location ---
     useEffect(() => {
-        const query = activeField === "origin" ? originQuery : destQuery;
+        handleAutoLocate();
+    }, []);
 
-        if (!query || query.length < 3 ||
-            (activeField === "origin" && query === originData?.address) ||
-            (activeField === "destination" && query === destData?.address)) {
-            setSuggestions([]);
-            return;
-        }
-
-        const timeoutId = setTimeout(async () => {
-            setIsSearching(true);
-            try {
-                const res = await axios.get(`https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=5`);
-                setSuggestions(res.data.features || []);
-            } catch (error) {
-                console.error("Geocoding error:", error);
-            } finally {
-                setIsSearching(false);
-            }
-        }, 500);
-
-        return () => clearTimeout(timeoutId);
-    }, [originQuery, destQuery, activeField, originData, destData]);
-
-    // --- GPS Auto-Locate ---
+    // --- GPS Auto-Locate using OpenStreetMap (Nominatim) ---
     const handleAutoLocate = () => {
         if (!navigator.geolocation) {
             showAlert("Geolocation is not supported by your browser.", "error");
@@ -148,11 +113,12 @@ export default function BookRidePage() {
             async (position) => {
                 const { latitude, longitude } = position.coords;
                 try {
-                    const res = await axios.get(`https://photon.komoot.io/reverse?lon=${longitude}&lat=${latitude}`);
-                    const feature = res.data.features?.[0];
-                    if (feature) {
-                        const address = formatAddress(feature.properties);
-                        const state = extractState(feature.properties);
+                    const res = await axios.get(`https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`);
+                    const addressData = res.data;
+
+                    if (addressData && addressData.display_name) {
+                        const address = addressData.display_name;
+                        const state = addressData.address?.state || "unknown";
 
                         setOriginData({ address, state, lat: latitude, lng: longitude });
                         setOriginQuery(address);
@@ -166,17 +132,51 @@ export default function BookRidePage() {
                 }
             },
             (error) => {
-                showAlert("Please allow location access to use this feature.", "error");
+                showAlert("Please allow location access to auto-fill pickup.", "error");
                 setIsLocating(false);
-            }
+            },
+            { enableHighAccuracy: true, timeout: 10000 }
         );
     };
 
-    // --- Select Suggestion with STRICT INTRA-STATE CHECK ---
-    const handleSelectSuggestion = (feature: any) => {
-        const address = formatAddress(feature.properties);
-        const state = extractState(feature.properties);
-        const [lng, lat] = feature.geometry.coordinates;
+    // --- Debounced Search for OpenStreetMap (leaflet-geosearch) ---
+    useEffect(() => {
+        const query = activeField === "origin" ? originQuery : destQuery;
+
+        if (!query || query.length < 3 ||
+            (activeField === "origin" && query === originData?.address) ||
+            (activeField === "destination" && query === destData?.address)) {
+            setSuggestions([]);
+            return;
+        }
+
+        const timeoutId = setTimeout(async () => {
+            setIsSearching(true);
+            try {
+                const { OpenStreetMapProvider } = await import('leaflet-geosearch');
+                // Strict India Filter
+                const provider = new OpenStreetMapProvider({
+                    params: { countrycodes: 'in', addressdetails: 1 }
+                });
+
+                const results = await provider.search({ query });
+                setSuggestions(results || []);
+            } catch (error) {
+                console.error("Geocoding error:", error);
+            } finally {
+                setIsSearching(false);
+            }
+        }, 800); // 800ms debounce prevents rate-limiting issues on Nominatim
+
+        return () => clearTimeout(timeoutId);
+    }, [originQuery, destQuery, activeField, originData, destData]);
+
+    // --- Select Suggestion ---
+    const handleSelectSuggestion = (result: any) => {
+        const address = result.label;
+        const lat = result.y;
+        const lng = result.x;
+        const state = result.raw?.address?.state || "unknown";
 
         if (activeField === "origin") {
             setOriginData({ address, state, lat, lng });
@@ -184,11 +184,6 @@ export default function BookRidePage() {
             setDestData(null);
             setDestQuery("");
         } else if (activeField === "destination") {
-            if (originData && originData.state !== "custom" && state !== "unknown" && state !== "custom" && state !== originData.state) {
-                showAlert(`Inter-state rides are not allowed. You must select a destination within ${originData.state.toUpperCase()}.`, "error");
-                setDestQuery("");
-                return;
-            }
             setDestData({ address, state, lat, lng });
             setDestQuery(address);
         }
@@ -221,7 +216,7 @@ export default function BookRidePage() {
             return;
         }
         showAlert("Finding your captain...", "success");
-        router.push("/user/search?vehicle=" + selectedVehicle + "&oLat=" + originData?.lat + "&oLng=" + originData?.lng + "&dLat=" + destData?.lat + "&dLng=" + destData?.lng + "&oAddr=" + originData?.address + "&dAddr=" + destData?.address);
+        router.push(`/user/search?vehicle=${selectedVehicle}&mobile=${mobile}&oLat=${originData?.lat}&oLng=${originData?.lng}&dLat=${destData?.lat}&dLng=${destData?.lng}&oAddr=${encodeURIComponent(originData?.address || '')}&dAddr=${encodeURIComponent(destData?.address || '')}`);
     };
 
     const currentQuery = activeField === "origin" ? originQuery : destQuery;
@@ -229,10 +224,10 @@ export default function BookRidePage() {
     return (
         <main className="min-h-screen bg-gray-50 dark:bg-[#050505] transition-colors duration-300 font-sans p-4 lg:p-0 flex items-center justify-center lg:items-stretch lg:justify-start">
 
-            {/* --- BOOKING FORM SIDEBAR (Responsive) --- */}
+            {/* --- BOOKING FORM SIDEBAR --- */}
             <div className="w-full max-w-[400px] lg:max-w-[480px] lg:w-[480px] h-[90vh] lg:h-screen max-h-[850px] lg:max-h-screen bg-white dark:bg-[#0a0a0a] rounded-4xl lg:rounded-none shadow-2xl lg:shadow-[20px_0_40px_-15px_rgba(0,0,0,0.2)] border border-gray-100 dark:border-gray-900 lg:border-0 lg:border-r overflow-hidden flex flex-col relative z-20 shrink-0">
 
-                {/* --- HEADER --- */}
+                {/* HEADER */}
                 <div className="p-6 border-b border-gray-100 dark:border-gray-900 flex items-center justify-between bg-white dark:bg-[#0a0a0a] z-20 shrink-0">
                     <div className="flex items-center space-x-4">
                         <button onClick={() => router.back()} className="w-10 h-10 flex items-center justify-center rounded-full border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors">
@@ -249,16 +244,13 @@ export default function BookRidePage() {
                             <motion.div
                                 key={idx}
                                 animate={{ width: idx < progressCount ? 20 : 8 }}
-                                className={`h-2 rounded-full transition-colors duration-300 ${idx < progressCount
-                                    ? "bg-black dark:bg-white"
-                                    : "bg-gray-300 dark:bg-gray-700"
-                                    }`}
+                                className={`h-2 rounded-full transition-colors duration-300 ${idx < progressCount ? "bg-black dark:bg-white" : "bg-gray-300 dark:bg-gray-700"}`}
                             />
                         ))}
                     </div>
                 </div>
 
-                {/* --- SCROLLABLE FORM --- */}
+                {/* SCROLLABLE FORM */}
                 <div className="flex-1 overflow-y-auto hide-scrollbar p-6 space-y-10">
 
                     {/* STEP 1: CHOOSE VEHICLE */}
@@ -275,8 +267,7 @@ export default function BookRidePage() {
                                     <button
                                         key={v.id}
                                         onClick={() => setSelectedVehicle(v.id)}
-                                        className={`relative p-4 rounded-2xl border transition-all duration-300 text-left 
-                                            ${isActive ? "bg-black dark:bg-white border-transparent text-white dark:text-black shadow-lg" : "bg-white dark:bg-[#0a0a0a] border-gray-100 dark:border-gray-800 hover:border-gray-200 dark:hover:border-gray-700 text-black dark:text-white"}`}
+                                        className={`relative p-4 rounded-2xl border transition-all duration-300 text-left ${isActive ? "bg-black dark:bg-white border-transparent text-white dark:text-black shadow-lg" : "bg-white dark:bg-[#0a0a0a] border-gray-100 dark:border-gray-800 hover:border-gray-200 dark:hover:border-gray-700 text-black dark:text-white"}`}
                                     >
                                         <Icon className="w-6 h-6 mb-3" />
                                         <h3 className="font-bold text-sm leading-tight">{v.label}</h3>
@@ -323,7 +314,6 @@ export default function BookRidePage() {
                         </h2>
 
                         <div className="space-y-3 relative">
-
                             {/* Origin Input */}
                             <div className="relative z-10">
                                 <div className={`flex items-center bg-gray-50/50 dark:bg-gray-900/50 border-2 rounded-2xl focus-within:border-black dark:focus-within:border-white transition-colors ${originData ? 'border-gray-200 dark:border-gray-700' : 'border-gray-100 dark:border-gray-800'}`}>
@@ -394,14 +384,18 @@ export default function BookRidePage() {
                                         )}
 
                                         {/* API Results BELOW */}
-                                        {suggestions.map((s, i) => (
+                                        {suggestions.map((s: any, i: number) => (
                                             <button
                                                 key={i}
                                                 onClick={() => handleSelectSuggestion(s)}
                                                 className="w-full text-left px-5 py-4 border-b border-gray-50 dark:border-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors flex flex-col last:border-0"
                                             >
-                                                <span className="font-bold text-sm text-black dark:text-white truncate">{s.properties.name || s.properties.street || "Unknown Road"}</span>
-                                                <span className="text-xs text-gray-500 truncate mt-1">{formatAddress(s.properties)}</span>
+                                                <span className="font-bold text-sm text-black dark:text-white truncate">
+                                                    {s.label.split(',')[0]} {/* Primary Location Name */}
+                                                </span>
+                                                <span className="text-xs text-gray-500 truncate mt-1">
+                                                    {s.label} {/* Full Address */}
+                                                </span>
                                             </button>
                                         ))}
                                     </motion.div>
@@ -412,7 +406,7 @@ export default function BookRidePage() {
 
                 </div>
 
-                {/* --- FIXED BOTTOM ACTION --- */}
+                {/* FIXED BOTTOM ACTION */}
                 <div className="p-6 border-t border-gray-100 dark:border-gray-900 bg-white dark:bg-[#0a0a0a] z-30 shrink-0">
                     <button
                         onClick={handleContinue}
@@ -422,13 +416,10 @@ export default function BookRidePage() {
                         Continue
                     </button>
                 </div>
-
             </div>
 
-            {/* --- DESKTOP HERO SECTION (Hidden on Mobile) --- */}
+            {/* DESKTOP HERO SECTION */}
             <div className="hidden lg:flex flex-1 relative bg-black items-center justify-center overflow-hidden">
-
-                {/* Animated Background Slider */}
                 <AnimatePresence>
                     <motion.img
                         key={currentImageIndex}
@@ -441,11 +432,7 @@ export default function BookRidePage() {
                         className="absolute inset-0 w-full h-full object-cover"
                     />
                 </AnimatePresence>
-
-                {/* linear Overlay for text readability */}
                 <div className="absolute inset-0 bg-linear-to-r from-black/90 via-black/60 to-transparent z-10" />
-
-                {/* Text Content */}
                 <div className="relative z-20 max-w-2xl px-16 text-white w-full">
                     <h1 className="text-6xl xl:text-7xl font-black mb-6 tracking-tight leading-tight">
                         Book Any <br /><span className="text-transparent bg-clip-text bg-linear-to-r from-white to-gray-400">Vehicle.</span>
@@ -453,8 +440,6 @@ export default function BookRidePage() {
                     <p className="text-xl font-medium text-gray-300 max-w-lg leading-relaxed">
                         From daily commutes to heavy transport — all in one platform. Secure, fast, and strictly regulated for your safety.
                     </p>
-
-                    {/* Decorative Icons */}
                     <div className="flex gap-8 mt-12 opacity-60">
                         <Bike className="w-8 h-8" />
                         <Car className="w-8 h-8" />
@@ -467,7 +452,6 @@ export default function BookRidePage() {
                 __html: `
                 .hide-scrollbar::-webkit-scrollbar { display: none; }
                 .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-                .text-color-context { color: currentColor; }
             `}} />
         </main>
     );

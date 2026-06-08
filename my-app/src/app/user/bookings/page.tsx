@@ -7,9 +7,14 @@ import { useRouter } from "next/navigation";
 import {
     Car, Calendar, User, Phone,
     ChevronRight, Loader2, RefreshCw, CarFront, Bike, Package, Truck,
-    ChevronDown
+    ChevronDown,
+    ArrowLeft
 } from "lucide-react";
 import Navbar from "@/components/Navbar";
+import { io } from "socket.io-client";
+import { useSelector } from "react-redux";
+import { RootState } from "@/store";
+import { useAlert } from "@/context/AlertContext";
 
 const VEHICLE_ICONS: Record<string, any> = {
     BIKE: Bike, AUTO: CarFront, CAR: Car, LOADING: Package, TRUCK: Truck,
@@ -17,6 +22,9 @@ const VEHICLE_ICONS: Record<string, any> = {
 
 export default function UserBookingsPage() {
     const router = useRouter();
+    const { user } = useSelector((state: RootState) => state.auth);
+    const { showAlert } = useAlert();
+
     const [bookings, setBookings] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [filter, setFilter] = useState("ALL");
@@ -36,6 +44,31 @@ export default function UserBookingsPage() {
             setIsLoading(false);
         }
     };
+
+    // --- GLOBAL REQUEST & UPDATE LISTENER ---
+    useEffect(() => {
+        if (!user?.id) return;
+        const socketUrl = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || "http://localhost:8000";
+        const newSocket = io(socketUrl);
+
+        newSocket.on("connect", () => newSocket.emit("register_user", user.id));
+
+        newSocket.on("ride_accepted", () => {
+            showAlert("Driver accepted your ride! Please complete payment to start.", "success");
+            fetchBookings();
+        });
+
+        newSocket.on("ride_rejected", () => {
+            showAlert("Driver declined the ride. Please try finding another driver.", "error");
+            fetchBookings();
+        });
+
+        newSocket.on("ride_updated", () => {
+            fetchBookings();
+        });
+
+        return () => { newSocket.disconnect(); };
+    }, [user?.id, showAlert]);
 
     const filteredBookings = bookings.filter(b => {
         if (filter === "ALL") return true;
@@ -57,21 +90,28 @@ export default function UserBookingsPage() {
     };
 
     return (
-        <main className="min-h-screen bg-gray-50 dark:bg-[#050505] font-sans transition-colors duration-300">
-            <div className="bg-black text-white">
+        <main className="min-h-dvh bg-gray-50 dark:bg-[#050505] font-sans transition-colors duration-300 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+            <div className="sticky top-0 z-50 w-full pb-10 bg-black text-white shadow-md">
                 <Navbar onLoginClick={() => { }} />
             </div>
 
-            <div className="max-w-[800px] mx-auto px-4 sm:px-6 py-12 md:py-20">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6">
-                    <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
-                        <div className="flex items-center gap-3 mb-2">
-                            <div className="w-10 h-10 bg-black dark:bg-white rounded-xl flex items-center justify-center shadow-lg">
-                                <Car className="w-5 h-5 text-white dark:text-black" />
+            <div className="max-w-[800px] mx-auto px-4 sm:px-6 pb-12 md:pb-20">
+
+                {/* Updated Responsive Row with Back Button */}
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 mt-10 gap-6">
+                    <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="flex items-start gap-4">
+                        <button onClick={() => router.back()} className="w-10 h-10 flex items-center justify-center rounded-full border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors shrink-0 mt-1">
+                            <ArrowLeft className="w-5 h-5 text-black dark:text-white" />
+                        </button>
+                        <div>
+                            <div className="flex items-center gap-3 mb-2">
+                                <div className="w-10 h-10 bg-black dark:bg-white rounded-xl flex items-center justify-center shadow-lg">
+                                    <Car className="w-5 h-5 text-white dark:text-black" />
+                                </div>
+                                <h1 className="text-3xl font-black text-black dark:text-white tracking-tight">My Bookings</h1>
                             </div>
-                            <h1 className="text-3xl font-black text-black dark:text-white tracking-tight">My Bookings</h1>
+                            <p className="text-gray-500 dark:text-gray-400 font-medium ml-1">{bookings.length} total rides found</p>
                         </div>
-                        <p className="text-gray-500 dark:text-gray-400 font-medium ml-1">{bookings.length} total rides found</p>
                     </motion.div>
 
                     <motion.div
@@ -110,7 +150,9 @@ export default function UserBookingsPage() {
                         <AnimatePresence mode="popLayout">
                             {filteredBookings.map((booking, i) => {
                                 const Icon = VEHICLE_ICONS[booking.vehicle?.type] || Car;
-                                const isActive = ["REQUESTED", "AWAITING_PAYMENT", "CONFIRMED", "STARTED"].includes(booking.bookingStatus);
+
+                                // ONLY show the tracking button if payment is confirmed
+                                const isReadyToTrack = ["CONFIRMED", "STARTED"].includes(booking.bookingStatus);
 
                                 return (
                                     <motion.div
@@ -179,7 +221,7 @@ export default function UserBookingsPage() {
 
                                             <div className="flex items-center gap-4">
                                                 <span className="text-xl font-black text-black dark:text-white">₹{booking.fare}</span>
-                                                {isActive && (
+                                                {isReadyToTrack && (
                                                     <button
                                                         onClick={() => router.push(`/user/ride/active?id=${booking.id}`)}
                                                         className="flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"

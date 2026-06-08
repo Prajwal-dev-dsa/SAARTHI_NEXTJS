@@ -80,16 +80,14 @@ function SearchPageContent() {
             }
         }, 1500);
         return () => clearTimeout(timer);
-    }, [searchParams, router, isCustomDestination]);
+    }, [searchParams, router, isCustomDestination, showAlert]);
 
+    // --- Reverse Geocoding with OpenStreetMap (Nominatim) ---
     const handleMarkerDragEnd = async (type: "origin" | "destination", lat: number, lng: number) => {
         setIsLoading(true);
         try {
-            const res = await axios.get(`https://photon.komoot.io/reverse?lon=${lng}&lat=${lat}`);
-            const feature = res.data.features?.[0];
-            const newAddress = feature
-                ? [feature.properties.name, feature.properties.street, feature.properties.city, feature.properties.state].filter(Boolean).join(", ")
-                : `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+            const res = await axios.get(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`);
+            const newAddress = res.data?.display_name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
 
             setLocations(prev => ({
                 ...prev,

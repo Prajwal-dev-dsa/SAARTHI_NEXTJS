@@ -16,7 +16,13 @@ export async function GET(req: NextRequest) {
     const bookings = await prisma.booking.findMany({
       where: {
         partnerId: session.user.id,
-        bookingStatus: "COMPLETED",
+        OR: [
+          { bookingStatus: "COMPLETED" },
+          {
+            bookingStatus: "CANCELLED",
+            paymentStatus: "PAID",
+          },
+        ],
         updated_at: { gte: sevenDaysAgo },
       },
       select: { updated_at: true, partnerAmount: true },

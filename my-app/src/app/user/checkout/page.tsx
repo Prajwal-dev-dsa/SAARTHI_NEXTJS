@@ -10,7 +10,7 @@ import { RootState } from "@/store";
 import {
     ArrowLeft, Car, Bike, Truck, Package, CarFront,
     Clock, ShieldCheck, CreditCard, ArrowRight, Loader2,
-    XCircle, CheckCircle2, Wallet, Check
+    XCircle, CheckCircle2, Wallet, Check, AlertTriangle
 } from "lucide-react";
 import { useAlert } from "@/context/AlertContext";
 
@@ -41,10 +41,12 @@ function CheckoutContent() {
     const [bookingStatus, setBookingStatus] = useState<string>("IDLE");
     const [isCheckingState, setIsCheckingState] = useState(true);
     const [isRequesting, setIsRequesting] = useState(false);
-    const [isCancelling, setIsCancelling] = useState(false);
     const [showPaymentOptions, setShowPaymentOptions] = useState(false);
     const [paymentMethod, setPaymentMethod] = useState<"cash" | "online" | null>(null);
     const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+
+    const [showCancelModal, setShowCancelModal] = useState(false);
+    const [isCancelling, setIsCancelling] = useState(false);
 
     const pickup = searchParams.get("pickup") || "";
     const drop = searchParams.get("drop") || "";
@@ -59,10 +61,8 @@ function CheckoutContent() {
 
     const VehicleIcon = VEHICLE_ICONS[vehicle] || Car;
 
-    // --- Socket Initialization & Listeners ---
     useEffect(() => {
         if (!user?.id) return;
-
         const socketUrl = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || "http://localhost:8000";
         const newSocket = io(socketUrl);
         setSocket(newSocket);
@@ -71,7 +71,6 @@ function CheckoutContent() {
             newSocket.emit("register_user", user.id);
         });
 
-        // Instant Socket Triggers from Partner
         newSocket.on("ride_accepted", (data) => {
             if (data.bookingId) setBookingStatus("AWAITING_PAYMENT");
         });
@@ -86,7 +85,6 @@ function CheckoutContent() {
         return () => { newSocket.disconnect(); };
     }, [user?.id, showAlert]);
 
-    // --- On Load: Check Active Booking ---
     useEffect(() => {
         if (!pickup || !drop || !driverId) {
             router.push("/user/search");
@@ -111,7 +109,6 @@ function CheckoutContent() {
         checkCurrentBooking();
     }, [pickup, drop, driverId, router]);
 
-    // --- 1. Request Ride ---
     const handleRequestRide = async () => {
         setIsRequesting(true);
         const bookingPayload = {
@@ -129,7 +126,6 @@ function CheckoutContent() {
             setBookingStatus(booking.bookingStatus);
 
             if (!res.data.isExisting && socket) {
-                // Fire instant request to partner
                 socket.emit("new_ride_request", {
                     partnerId: driverId, bookingId: booking.id, pickup, drop, fare, userId: user?.id
                 });
@@ -142,7 +138,6 @@ function CheckoutContent() {
         }
     };
 
-    // --- 2. Fallback Polling Logic ---
     useEffect(() => {
         let interval: NodeJS.Timeout;
         if (bookingId && bookingStatus === "REQUESTED") {
@@ -167,7 +162,6 @@ function CheckoutContent() {
         return () => clearInterval(interval);
     }, [bookingId, bookingStatus, showAlert]);
 
-    // --- 3. Animation Timeout ---
     useEffect(() => {
         if (bookingStatus === "AWAITING_PAYMENT" && !showPaymentOptions) {
             const timer = setTimeout(() => setShowPaymentOptions(true), 2000);
@@ -175,30 +169,35 @@ function CheckoutContent() {
         }
     }, [bookingStatus, showPaymentOptions]);
 
-    // --- 4. Cancel Request ---
-    const handleCancelRequest = async () => {
+    // --- Custom Cancel Modal Execution ---
+    const confirmCancelRequest = async () => {
         if (!bookingId) return;
         setIsCancelling(true);
         try {
             await axios.post("/api/user/booking/cancel", { bookingId });
 
-            // Instantly notify partner that user cancelled
             if (socket) {
                 socket.emit("ride_cancelled", { partnerId: driverId, bookingId });
             }
 
-            setBookingStatus("IDLE");
-            setBookingId(null);
-            setShowPaymentOptions(false);
             showAlert("Request Cancelled.", "success");
+
+            if (bookingStatus === "CONFIRMED") {
+                router.push("/");
+            } else {
+                setBookingStatus("IDLE");
+                setBookingId(null);
+                setShowPaymentOptions(false);
+                setShowCancelModal(false);
+            }
         } catch (error) {
             showAlert("Failed to cancel.", "error");
+            setShowCancelModal(false);
         } finally {
             setIsCancelling(false);
         }
     };
 
-    // --- 5. Payment Flow (Cash & Online) ---
     const handleProceedToPayment = async () => {
         if (!paymentMethod) return showAlert("Please select a payment method", "error");
         setIsProcessingPayment(true);
@@ -234,6 +233,7 @@ function CheckoutContent() {
                             showAlert("Payment Successful!", "success");
                             setIsProcessingPayment(false);
                             setBookingStatus("CONFIRMED");
+                            socket?.emit("ride_updated", { partnerId: driverId, userId: user?.id });
 
                         } catch (err: any) {
                             setIsProcessingPayment(false);
@@ -273,6 +273,7 @@ function CheckoutContent() {
                 await axios.post("/api/payment/cash", { bookingId });
                 showAlert("Ride Confirmed! Pay with Cash at drop.", "success");
                 setBookingStatus("CONFIRMED");
+                socket?.emit("ride_updated", { partnerId: driverId, userId: user?.id });
             } catch (error: any) {
                 const msg = error.response?.data?.error || "Failed to confirm ride";
                 showAlert(msg, "error");
@@ -301,6 +302,38 @@ function CheckoutContent() {
 
     return (
         <main className="min-h-screen bg-gray-50 dark:bg-[#050505] font-sans transition-colors duration-300 py-10 px-4 md:px-8 flex flex-col items-center justify-center">
+
+            {/* Custom Cancel Modal Overlay */}
+            <AnimatePresence>
+                {showCancelModal && (
+                    <div className="fixed inset-0 z-100 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                            className="bg-white dark:bg-[#111] border border-gray-200 dark:border-gray-800 rounded-3xl p-6 max-w-sm w-full shadow-2xl"
+                        >
+                            <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mb-4">
+                                <AlertTriangle className="w-6 h-6 text-red-600 dark:text-red-500" />
+                            </div>
+                            <h3 className="text-xl font-black text-black dark:text-white mb-2">Cancel Ride?</h3>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 leading-relaxed">
+                                {bookingStatus === "CONFIRMED" && paymentMethod === "online"
+                                    ? "Are you sure you want to cancel? Since you paid online, the amount will not be refunded."
+                                    : "Are you sure you want to cancel this ride? This action cannot be undone."}
+                            </p>
+                            <div className="flex gap-3">
+                                <button onClick={() => setShowCancelModal(false)} disabled={isCancelling} className="flex-1 py-3.5 bg-gray-100 dark:bg-gray-800 text-black dark:text-white rounded-xl font-bold hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
+                                    No, Keep Ride
+                                </button>
+                                <button onClick={confirmCancelRequest} disabled={isCancelling} className="flex-1 py-3.5 bg-red-600 text-white rounded-xl font-bold flex justify-center items-center gap-2 hover:bg-red-700 transition-colors disabled:opacity-50">
+                                    {isCancelling ? <Loader2 className="w-4 h-4 animate-spin" /> : "Yes, Cancel"}
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
 
             <div className="absolute top-6 left-6 z-40">
                 <button onClick={() => router.back()} className="w-12 h-12 flex items-center justify-center bg-white dark:bg-[#111] rounded-full shadow-lg hover:scale-105 transition-transform border border-gray-100 dark:border-gray-800">
@@ -405,9 +438,8 @@ function CheckoutContent() {
                                         </div>
                                         <h3 className="text-2xl font-black text-black dark:text-white mb-2">Finding Your Driver</h3>
                                         <p className="text-sm text-gray-500 dark:text-gray-400 mb-10">Waiting for driver to accept...</p>
-                                        <button onClick={handleCancelRequest} disabled={isCancelling} className="flex items-center gap-2 text-gray-400 hover:text-red-500 transition-colors px-4 py-2 border border-gray-200 dark:border-gray-800 rounded-full text-xs font-bold uppercase tracking-widest disabled:opacity-50">
-                                            {isCancelling ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
-                                            {isCancelling ? "Cancelling..." : "Cancel Request"}
+                                        <button onClick={() => setShowCancelModal(true)} disabled={isCancelling} className="flex items-center gap-2 text-gray-400 hover:text-red-500 transition-colors px-4 py-2 border border-gray-200 dark:border-gray-800 rounded-full text-xs font-bold uppercase tracking-widest disabled:opacity-50">
+                                            <XCircle className="w-4 h-4" /> Cancel Request
                                         </button>
                                     </motion.div>
                                 )}
@@ -500,9 +532,17 @@ function CheckoutContent() {
 
                                         <button
                                             onClick={() => router.push(`/user/ride/active?id=${bookingId}`)}
-                                            className="bg-black dark:bg-white text-white dark:text-black font-black text-sm px-8 py-4 rounded-xl hover:scale-105 transition-transform shadow-xl flex items-center gap-2"
+                                            className="bg-black dark:bg-white text-white dark:text-black font-black text-sm px-8 py-4 rounded-xl hover:scale-105 transition-transform shadow-xl flex items-center gap-2 mb-8"
                                         >
                                             Track Your Ride <ArrowRight className="w-4 h-4" />
+                                        </button>
+
+                                        <button
+                                            onClick={() => setShowCancelModal(true)}
+                                            disabled={isCancelling}
+                                            className="flex items-center gap-2 text-red-500 hover:text-red-600 transition-colors text-xs font-bold uppercase tracking-widest disabled:opacity-50"
+                                        >
+                                            <XCircle className="w-4 h-4" /> Cancel Ride
                                         </button>
                                     </motion.div>
                                 )}
