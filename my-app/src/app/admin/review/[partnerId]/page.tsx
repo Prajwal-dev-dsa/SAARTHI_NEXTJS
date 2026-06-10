@@ -9,6 +9,7 @@ import {
   XCircle, Clock, ExternalLink, Loader2
 } from "lucide-react";
 import { useAlert } from "@/context/AlertContext";
+import { io, Socket } from "socket.io-client";
 
 export default function AdminReviewPage() {
   const params = useParams();
@@ -20,11 +21,23 @@ export default function AdminReviewPage() {
   const [data, setData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [socket, setSocket] = useState<Socket | null>(null);
 
   // Modal States
   const [isApproveModalOpen, setIsApproveModalOpen] = useState(false);
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
+
+  // --- Initialize Admin Socket ---
+  useEffect(() => {
+    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || "http://localhost:8000";
+    const newSocket = io(socketUrl);
+    setSocket(newSocket);
+
+    newSocket.on("connect", () => newSocket.emit("register_admin", "ADMIN_ID_HERE"));
+
+    return () => { newSocket.disconnect(); };
+  }, []);
 
   // Fetch Partner Data
   useEffect(() => {
@@ -43,8 +56,8 @@ export default function AdminReviewPage() {
   }, [partnerId, router, showAlert]);
 
   // Action Handler
-  const handleAction = async (action: "APPROVE" | "REJECTE") => {
-    if (action === "REJECTE" && !rejectReason.trim()) {
+  const handleAction = async (action: "APPROVE" | "REJECT") => {
+    if (action === "REJECT" && !rejectReason.trim()) {
       showAlert("Please provide a rejection reason.", "error");
       return;
     }
@@ -52,8 +65,18 @@ export default function AdminReviewPage() {
     setIsProcessing(true);
     try {
       await axios.post(`/api/admin/review/${partnerId}`, { action, reason: rejectReason });
-      showAlert(`Partner successfully ${action.toLowerCase()}d!`, "success");
-      router.push("/"); // Send admin back to dashboard
+
+      const socketUrl = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || "http://localhost:8000";
+      const tempSocket = io(socketUrl);
+
+      tempSocket.emit("admin_onboarding_action", {
+        partnerId: partnerId,
+        type: action === "APPROVE" ? "DOCS_APPROVED" : "DOCS_REJECTED",
+        reason: rejectReason
+      });
+
+      showAlert(`Partner successfully ${action.toLowerCase()}ed!`, "success");
+      router.push("/");
     } catch (error: any) {
       showAlert(error.response?.data?.error || "Failed to process action", "error");
       setIsProcessing(false);
@@ -266,7 +289,7 @@ export default function AdminReviewPage() {
 
               <div className="flex space-x-3">
                 <button onClick={() => setIsRejectModalOpen(false)} className="flex-1 py-3 rounded-xl border border-gray-200 dark:border-gray-800 font-bold text-black dark:text-white">Cancel</button>
-                <button onClick={() => handleAction("REJECTE")} disabled={isProcessing} className="flex-1 py-3 rounded-xl bg-red-600 text-white font-bold hover:bg-red-700 transition-colors disabled:opacity-50">
+                <button onClick={() => handleAction("REJECT")} disabled={isProcessing} className="flex-1 py-3 rounded-xl bg-red-600 text-white font-bold hover:bg-red-700 transition-colors disabled:opacity-50">
                   {isProcessing ? "Processing..." : "Reject"}
                 </button>
               </div>

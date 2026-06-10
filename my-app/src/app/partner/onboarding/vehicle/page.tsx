@@ -106,7 +106,7 @@ export default function VehicleDetailsPage() {
                 </div>
 
                 {/* Scrollable Content */}
-                <div className="flex-1 overflow-y-auto px-8 md:pb-28 hide-scrollbar">
+                <div className="flex-1 overflow-y-auto px-8 pb-28 hide-scrollbar">
                     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mt-4">
                         <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-3">Vehicle Type</p>
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">

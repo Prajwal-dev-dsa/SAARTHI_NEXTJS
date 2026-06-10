@@ -12,6 +12,7 @@ import {
 import axios from "axios";
 import { useAlert } from "../../context/AlertContext";
 import EarningsChart from "@/components/EarningsChart";
+import { io } from "socket.io-client";
 
 // --- TypeScript Interfaces ---
 interface DashboardMetrics {
@@ -47,17 +48,24 @@ export default function AdminDashboard() {
     const [isStartingCall, setIsStartingCall] = useState<string | null>(null);
     const [earningsData, setEarningsData] = useState(null);
 
-    // Profile Dropdown State
     const [isProfileOpen, setIsProfileOpen] = useState(false);
     const [isDarkMode, setIsDarkMode] = useState(false);
 
-    // Fetch Data & Check initial theme
+    const [socket, setSocket] = useState<any>(null);
+
     useEffect(() => {
+        const socketUrl = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || "http://localhost:8000";
+        const newSocket = io(socketUrl);
+        setSocket(newSocket);
+
+        newSocket.on("connect", () => {
+            newSocket.emit("register_admin", "ADMIN_GLOBAL_NODE");
+        });
+
         setIsDarkMode(document.documentElement.classList.contains("dark"));
 
         const fetchDashboardData = async () => {
             try {
-                // Fetch ALL THREE queues concurrently
                 const [dashRes, videoRes, vehicleRes, earningsRes] = await Promise.all([
                     axios.get("/api/admin/dashboard"),
                     axios.get("/api/admin/video-kyc"),
@@ -65,17 +73,12 @@ export default function AdminDashboard() {
                     axios.get("/api/admin/earnings")
                 ]);
                 if (earningsRes.data) setEarningsData(earningsRes.data);
-
                 if (dashRes.data) {
                     setMetrics(dashRes.data.metrics);
                     setQueue(dashRes.data.underReview);
                 }
-                if (videoRes.data) {
-                    setVideoQueue(videoRes.data);
-                }
-                if (vehicleRes.data) {
-                    setVehicleQueue(vehicleRes.data);
-                }
+                if (videoRes.data) setVideoQueue(videoRes.data);
+                if (vehicleRes.data) setVehicleQueue(vehicleRes.data);
             } catch (error: any) {
                 showAlert("Failed to load admin dashboard data.", "error");
             } finally {
@@ -84,18 +87,12 @@ export default function AdminDashboard() {
         };
 
         fetchDashboardData();
-    }, [showAlert]);
 
-    // Theme Toggle Handler
-    const toggleTheme = () => {
-        if (isDarkMode) {
-            document.documentElement.classList.remove("dark");
-            setIsDarkMode(false);
-        } else {
-            document.documentElement.classList.add("dark");
-            setIsDarkMode(true);
-        }
-    };
+        newSocket.on("admin_queue_refresh", () => fetchDashboardData());
+        newSocket.on("onboarding_status_changed", () => fetchDashboardData());
+
+        return () => { newSocket.disconnect(); };
+    }, [showAlert]);
 
     // --- Start Video KYC Call ---
     const handleStartCall = async (partnerId: string, currentStatus?: string, roomId?: string) => {
@@ -108,11 +105,25 @@ export default function AdminDashboard() {
         try {
             const res = await axios.post("/api/admin/video-kyc", { partnerId });
             if (res.data?.roomId) {
+                if (socket) {
+                    socket.emit("admin_onboarding_action", { partnerId, type: "KYC_STARTED", roomId: res.data.roomId });
+                }
                 router.push(`/video-kyc/${res.data.roomId}`);
             }
         } catch (error) {
             showAlert("Failed to initiate video call", "error");
             setIsStartingCall(null);
+        }
+    };
+
+    // Theme Toggle Handler
+    const toggleTheme = () => {
+        if (isDarkMode) {
+            document.documentElement.classList.remove("dark");
+            setIsDarkMode(false);
+        } else {
+            document.documentElement.classList.add("dark");
+            setIsDarkMode(true);
         }
     };
 

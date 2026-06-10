@@ -6,19 +6,21 @@ import { motion } from "framer-motion";
 import { ArrowLeft, CheckCircle2, CreditCard, Landmark, Phone, AtSign, Loader2 } from "lucide-react";
 import axios from "axios";
 import { useAlert } from "@/context/AlertContext";
+import { io } from "socket.io-client";
+import { useSelector } from "react-redux";
+import { RootState } from "@/store";
 
 export default function BankDetailsPage() {
+    const { user } = useSelector((state: RootState) => state.auth);
     const router = useRouter();
     const { showAlert } = useAlert();
 
-    // Form States
     const [accountName, setAccountName] = useState("");
     const [accountNumber, setAccountNumber] = useState("");
     const [ifsc, setIfsc] = useState("");
     const [mobile, setMobile] = useState("");
     const [upi, setUpi] = useState("");
 
-    // Loading States
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -50,7 +52,6 @@ export default function BankDetailsPage() {
 
     // --- POST API: Submit/Update data ---
     const handleSubmit = async () => {
-        // Basic Frontend Validation
         if (!accountName.trim() || !accountNumber.trim() || !ifsc.trim() || !mobile.trim()) {
             showAlert("Please fill in all required fields.", "error");
             return;
@@ -67,15 +68,19 @@ export default function BankDetailsPage() {
                 upiId: upi,
             });
 
+            const socketUrl = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || "http://localhost:8000";
+            const tempSocket = io(socketUrl);
+            tempSocket.emit("partner_onboarding_update", { partnerId: user?.id, type: "BANK_SUBMITTED" });
+
             showAlert("Bank Setup Complete! Welcome to Saarthi.", "success");
 
-            // Route them to their new Partner Dashboard
-            router.push("/");
+            setTimeout(() => {
+                window.location.href = "/";
+            }, 500);
 
         } catch (error: any) {
             const errorMessage = error.response?.data?.error || "Failed to save bank details. Please try again.";
             showAlert(errorMessage, "error");
-        } finally {
             setIsSubmitting(false);
         }
     };
@@ -108,7 +113,7 @@ export default function BankDetailsPage() {
                 </div>
 
                 {/* Scrollable Content */}
-                <div className="flex-1 overflow-y-auto px-8 hide-scrollbar">
+                <div className="flex-1 overflow-y-auto pb-28 px-8 hide-scrollbar">
                     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mt-4 space-y-5">
 
                         <div className="flex flex-col">

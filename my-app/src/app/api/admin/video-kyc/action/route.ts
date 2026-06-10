@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
         },
       });
       return NextResponse.json(
-        { message: "Video KYC Approved" },
+        { message: "Video KYC Approved", partnerId: partner.id },
         { status: 200 },
       );
     }
@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
         },
       });
       return NextResponse.json(
-        { message: "Video KYC Rejected" },
+        { message: "Video KYC Rejected", partnerId: partner.id },
         { status: 200 },
       );
     }

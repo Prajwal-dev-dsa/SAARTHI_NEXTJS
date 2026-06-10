@@ -118,6 +118,12 @@ export default function Navbar({ onLoginClick }: NavbarProps) {
 
   const linksToRender = user?.role === "PARTNER" ? PARTNER_LINKS : USER_LINKS;
 
+  const isPartner = user?.role === "PARTNER";
+  const navTextColor = isPartner ? "text-black dark:text-white" : "text-white";
+  const navHoverColor = isPartner ? "hover:text-gray-600 dark:hover:text-gray-300" : "hover:text-gray-300";
+  const profileBtnClass = isPartner ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white text-black";
+  const profileRingClass = isPartner ? "hover:ring-black/20 dark:hover:ring-white/30" : "hover:ring-white/30";
+
   // PROFILE DROPDOWN
   const ProfileMenuContent = () => (
     <div className="flex flex-col text-black dark:text-white">
@@ -171,12 +177,12 @@ export default function Navbar({ onLoginClick }: NavbarProps) {
 
   return (
     <header className="absolute top-0 w-full z-50 bg-transparent pointer-events-auto">
-      <nav className="relative flex items-center justify-between px-6 py-4 md:px-16 text-white transition-colors duration-300">
+      <nav className={`relative flex items-center justify-between px-6 py-4 md:px-16 transition-colors duration-300 ${navTextColor}`}>
 
         {/* LOGO */}
         <div
           onClick={() => router.push("/")}
-          className="text-2xl font-black tracking-widest uppercase cursor-pointer text-white"
+          className={`text-2xl font-black tracking-widest uppercase cursor-pointer ${navTextColor}`}
         >
           Saarthi
         </div>
@@ -187,7 +193,7 @@ export default function Navbar({ onLoginClick }: NavbarProps) {
             <div key={link.name} className="relative flex items-center">
               <span
                 onClick={() => router.push(link.href)}
-                className="text-white hover:text-gray-300 cursor-pointer transition-colors relative flex items-center drop-shadow-sm"
+                className={`${navTextColor} ${navHoverColor} cursor-pointer transition-colors relative flex items-center drop-shadow-sm`}
               >
                 {link.name}
 
@@ -208,7 +214,7 @@ export default function Navbar({ onLoginClick }: NavbarProps) {
             <div className="relative" ref={profileRef}>
               <button
                 onClick={() => setIsProfileOpen(!isProfileOpen)}
-                className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center font-bold text-lg hover:ring-4 hover:ring-white/30 transition-all shadow-md"
+                className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg hover:ring-4 transition-all shadow-md ${profileBtnClass} ${profileRingClass}`}
               >
                 {userInitial}
               </button>
@@ -242,7 +248,7 @@ export default function Navbar({ onLoginClick }: NavbarProps) {
           {isAuthenticated ? (
             <button
               onClick={() => setIsMobileProfileOpen(true)}
-              className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center font-bold text-lg shadow-md"
+              className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg shadow-md ${profileBtnClass}`}
             >
               {userInitial}
             </button>
@@ -255,9 +261,9 @@ export default function Navbar({ onLoginClick }: NavbarProps) {
             </button>
           )}
           <button onClick={() => setIsMobileMenuOpen(true)} className="relative">
-            <Menu className="w-7 h-7 text-white drop-shadow-md" />
-            {user?.role === "PARTNER" && pendingCount > 0 && pathname !== "/partner/requests" && (
-              <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-600 rounded-full border border-white" />
+            <Menu className={`w-7 h-7 drop-shadow-md ${navTextColor}`} />
+            {isPartner && pendingCount > 0 && pathname !== "/partner/requests" && (
+              <div className={`absolute -top-1 -right-1 w-3 h-3 bg-red-600 rounded-full border ${isPartner ? "border-white dark:border-[#050505]" : "border-white"}`} />
             )}
           </button>
         </div>
@@ -275,7 +281,7 @@ export default function Navbar({ onLoginClick }: NavbarProps) {
                 <div onClick={() => { router.push("/"); setIsMobileMenuOpen(false); }} className="text-2xl font-black tracking-widest uppercase cursor-pointer">Saarthi</div>
                 <div className="flex items-center space-x-4">
                   {isAuthenticated && (
-                    <div className="w-10 h-10 rounded-full bg-black dark:bg-white text-white dark:text-black flex items-center justify-center font-bold text-lg">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${profileBtnClass}`}>
                       {userInitial}
                     </div>
                   )}

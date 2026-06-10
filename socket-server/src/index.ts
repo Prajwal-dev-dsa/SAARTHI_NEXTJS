@@ -48,6 +48,55 @@ io.on("connection", (socket: Socket) => {
     }
   });
 
+  // Register Admin to a secure broadcast room
+  socket.on("register_admin", async (adminId: string) => {
+    socket.join("admins_room");
+    console.log(`Admin ${adminId} registered to admins_room`);
+  });
+
+  socket.on(
+    "admin_onboarding_action",
+    (data: {
+      partnerId: string;
+      type:
+        | "KYC_STARTED"
+        | "KYC_APPROVED"
+        | "KYC_REJECTED"
+        | "VEHICLE_APPROVED"
+        | "VEHICLE_REJECTED";
+    }) => {
+      // Blast the signal instantly to the partner
+      io.to(`partner_${data.partnerId}`).emit(
+        "onboarding_status_changed",
+        data,
+      );
+
+      // Also instruct all admin dashboards to immediately re-sync their queues
+      io.to("admins_room").emit("admin_queue_refresh");
+    },
+  );
+
+  // Handle Onboarding Flow Real-Time Syncing (Phase 1 & 2)
+  socket.on(
+    "partner_onboarding_update",
+    (data: {
+      partnerId: string;
+      type: "BANK_SUBMITTED" | "DOCS_APPROVED" | "DOCS_REJECTED";
+    }) => {
+      if (data.type === "BANK_SUBMITTED") {
+        // Phase 1: Notify all admins that a new partner is ready for review
+        io.to("admins_room").emit("admin_queue_refresh");
+      } else {
+        // Phase 2: Notify the specific partner of the decision, AND refresh admin queues (to move them to Video KYC)
+        io.to(`partner_${data.partnerId}`).emit(
+          "onboarding_status_changed",
+          data,
+        );
+        io.to("admins_room").emit("admin_queue_refresh");
+      }
+    },
+  );
+
   // 3. Receive Live Location Updates (For BOTH Partners and Users)
   socket.on(
     "update_location",
@@ -139,7 +188,7 @@ io.on("connection", (socket: Socket) => {
     io.to(`user_${data.userId}`).emit("ride_rejected", data);
   });
 
-  // 3. Handle Disconnection
+  // 6. Handle Disconnection
   socket.on("disconnect", async () => {
     console.log(`Client disconnected: ${socket.id}`);
     try {

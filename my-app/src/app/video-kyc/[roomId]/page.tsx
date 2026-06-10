@@ -6,9 +6,12 @@ import { useSelector } from 'react-redux';
 import { RootState } from '@/store';
 import { ZegoUIKitPrebuilt } from '@zegocloud/zego-uikit-prebuilt';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle2, XCircle, PhoneOff, Loader2, Video, VideoOff, Mic, MicOff } from 'lucide-react';
+import { CheckCircle2, XCircle, Loader2, Video, VideoOff, Mic, MicOff } from 'lucide-react';
 import axios from 'axios';
 import { useAlert } from '@/context/AlertContext';
+import { io } from 'socket.io-client';
+import { useDispatch } from 'react-redux';
+import { setUser } from '@/store/authSlice';
 
 export default function VideoKycRoom() {
     const params = useParams();
@@ -19,19 +22,51 @@ export default function VideoKycRoom() {
     const user = useSelector((state: RootState) => state.auth.user);
     const isAdmin = user?.role === "ADMIN";
 
-    // Call States
+    const dispatch = useDispatch();
+
+    const userRef = useRef(user);
+    useEffect(() => { userRef.current = user; }, [user]);
+
+    useEffect(() => {
+        if (isAdmin || !userRef.current?.id) return;
+
+        const socketUrl = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || "http://localhost:8000";
+        const newSocket = io(socketUrl);
+
+        newSocket.on("connect", () => newSocket.emit("register_partner", userRef.current?.id));
+
+        newSocket.on("onboarding_status_changed", (data: any) => {
+            const currentUser = userRef.current;
+            if (!currentUser) return;
+
+            if (data.type === "KYC_APPROVED") {
+                showAlert("Video KYC Approved! Proceeding to pricing.", "success");
+                dispatch(setUser({ ...currentUser, videoKycStatus: "APPROVED", partnerOnboardingSteps: 5, videoKycRoomId: null }));
+
+                if (zpRef.current) { try { zpRef.current.destroy(); } catch (e) { } }
+                router.push("/");
+            } else if (data.type === "KYC_REJECTED") {
+                showAlert("Video KYC Rejected. Please check the reason.", "error");
+                dispatch(setUser({ ...currentUser, videoKycStatus: "REJECTED", videoKycRejectReason: data.reason, videoKycRoomId: null }));
+
+                if (zpRef.current) { try { zpRef.current.destroy(); } catch (e) { } }
+                router.push("/");
+            }
+        });
+
+        return () => { newSocket.disconnect(); };
+    }, [isAdmin, dispatch, router, showAlert]);
+
     const containerRef = useRef<HTMLDivElement>(null);
     const zpRef = useRef<any>(null);
     const hasInitialized = useRef(false);
     const [isInCall, setIsInCall] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
 
-    // Custom Pre-Join States
     const [isPreJoin, setIsPreJoin] = useState(true);
     const [camEnabled, setCamEnabled] = useState(true);
     const [micEnabled, setMicEnabled] = useState(true);
 
-    // Modal States
     const [showApproveModal, setShowApproveModal] = useState(false);
     const [showRejectModal, setShowRejectModal] = useState(false);
     const [rejectReason, setRejectReason] = useState("");
@@ -76,7 +111,10 @@ export default function VideoKycRoom() {
                             try { zpRef.current.destroy(); } catch (e) { }
                             zpRef.current = null;
                         }
-                        router.push('/');
+
+                        setTimeout(() => {
+                            router.push('/');
+                        }, 1500);
                     }
                 });
             } catch (error) {
@@ -108,18 +146,34 @@ export default function VideoKycRoom() {
 
         setIsProcessing(true);
         try {
-            await axios.post("/api/admin/video-kyc/action", { roomId, action, reason: rejectReason });
+            const res = await axios.post("/api/admin/video-kyc/action", { roomId, action, reason: rejectReason });
+            const accuratePartnerId = res.data.partnerId;
+
+            const socketUrl = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || "http://localhost:8000";
+            const tempSocket = io(socketUrl);
+
+            tempSocket.emit("admin_onboarding_action", {
+                partnerId: accuratePartnerId,
+                type: action === "APPROVE" ? "KYC_APPROVED" : "KYC_REJECTED",
+                reason: rejectReason
+            });
+
             showAlert(`Video KYC ${action === "APPROVE" ? "Approved" : "Rejected"} successfully.`, "success");
-            router.push('/');
+
+            if (zpRef.current) {
+                try { zpRef.current.destroy(); } catch (e) { }
+            }
+
+            setTimeout(() => {
+                router.push('/');
+            }, 500);
+
         } catch (error) {
             showAlert("Failed to process action.", "error");
             setIsProcessing(false);
         }
     };
 
-    const handleEndCall = () => {
-        router.push('/');
-    };
 
     // ---------------------------------------------------------
     // RENDER LOGIC
@@ -192,9 +246,6 @@ export default function VideoKycRoom() {
                         <XCircle className="w-4 h-4" /><span>Reject</span>
                     </button>
                     <div className="w-px h-6 bg-white/20 mx-1" />
-                    <button onClick={handleEndCall} className="bg-red-600 hover:bg-red-700 text-white text-sm font-bold px-5 py-2.5 rounded-xl flex items-center space-x-2 transition-colors">
-                        <PhoneOff className="w-4 h-4" /><span>End Call</span>
-                    </button>
                 </div>
             )}
 

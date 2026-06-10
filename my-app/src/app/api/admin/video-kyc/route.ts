@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import crypto from "crypto";
+import { io } from "socket.io-client";
 
 // GET: Fetch the Video KYC Queue
 export async function GET(req: NextRequest) {
@@ -67,6 +68,11 @@ export async function POST(req: NextRequest) {
         updated_at: new Date(),
       },
     });
+
+    const socketUrl =
+      process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || "http://localhost:8000";
+    const socket = io(socketUrl);
+    socket.emit("admin_onboarding_action", { partnerId, type: "KYC_STARTED" });
 
     return NextResponse.json(
       {

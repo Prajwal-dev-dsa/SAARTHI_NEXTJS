@@ -8,11 +8,10 @@ import axios from "axios";
 import { useAlert } from "@/context/AlertContext";
 
 
-// Helper definition to keep rendering clean
 const DOC_TYPES = [
-    { id: "aadhaar", dbKey: "aadharCardUrl", title: "Aadhaar / ID Proof", sub: "Government issued ID" },
-    { id: "license", dbKey: "drivingLicenseUrl", title: "Driving License", sub: "Valid driving license" },
-    { id: "rc", dbKey: "rcUrl", title: "Vehicle RC", sub: "Registration Certificate" }
+    { id: "aadhaar", dbKey: "aadharCardUrl", title: "Aadhaar / ID Proof", sub: "Max size: 4MB" },
+    { id: "license", dbKey: "drivingLicenseUrl", title: "Driving License", sub: "Max size: 4MB" },
+    { id: "rc", dbKey: "rcUrl", title: "Vehicle RC", sub: "Max size: 4MB" }
 ];
 
 export default function DocumentsPage() {
@@ -57,16 +56,23 @@ export default function DocumentsPage() {
         fetchDocs();
     }, []);
 
-    // Handle local file selection
+    // Handle local file selection with Size Validation (Max 4MB per file)
     const handleFileChange = (id: string, file: File | null) => {
         if (file) {
+            const MAX_FILE_SIZE_MB = 4;
+            const MAX_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+
+            if (file.size > MAX_SIZE_BYTES) {
+                showAlert(`File too large! Please select an image under ${MAX_FILE_SIZE_MB}MB.`, "error");
+                return;
+            }
+
             setFiles((prev) => ({ ...prev, [id]: file }));
         }
     };
 
     // --- POST API: Upload to Cloudinary & Save to DB ---
     const handleSubmit = async () => {
-        // Validation: Check if every document either has a new File OR an existing URL
         const hasAadhaar = files.aadhaar || existingUrls.aadharCardUrl;
         const hasLicense = files.license || existingUrls.drivingLicenseUrl;
         const hasRc = files.rc || existingUrls.rcUrl;
@@ -85,7 +91,6 @@ export default function DocumentsPage() {
             if (files.license) formData.append("license", files.license);
             if (files.rc) formData.append("rc", files.rc);
 
-            // Axios automatically sets the correct multipart boundaries when passing FormData
             await axios.post("/api/onboarding/documents", formData, {
                 headers: { "Content-Type": "multipart/form-data" },
             });
@@ -94,7 +99,14 @@ export default function DocumentsPage() {
             router.push("/partner/onboarding/bank");
 
         } catch (error: any) {
-            const errorMessage = error.response?.data?.error || "Upload failed. Please try again.";
+            let errorMessage = "Upload failed. Please try again.";
+
+            if (error.response?.status === 413) {
+                errorMessage = "Files are too large for the server. Please compress your images.";
+            } else if (error.response?.data?.error) {
+                errorMessage = error.response.data.error;
+            }
+
             showAlert(errorMessage, "error");
         } finally {
             setIsSubmitting(false);
@@ -129,11 +141,10 @@ export default function DocumentsPage() {
                 </div>
 
                 {/* Scrollable Content */}
-                <div className="flex-1 overflow-y-auto px-8 pb-24 hide-scrollbar">
+                <div className="flex-1 overflow-y-auto px-8 pb-28 hide-scrollbar">
                     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mt-4 space-y-4">
 
                         {DOC_TYPES.map((doc) => {
-                            // Check if we have a file queued, OR a URL already saved in the DB
                             const isUploaded = files[doc.id] !== null || existingUrls[doc.dbKey] !== "";
 
                             return (

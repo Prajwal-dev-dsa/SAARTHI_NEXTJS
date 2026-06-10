@@ -148,6 +148,7 @@ export async function POST(req: NextRequest) {
           phone: sanitizedMobile,
           partnerOnboardingSteps: 3,
           partnerStatus: "PENDING",
+          role: "PARTNER",
         },
       });
 

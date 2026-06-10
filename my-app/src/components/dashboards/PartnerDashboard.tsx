@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { useSelector, useDispatch } from "react-redux";
-import { RootState } from "../../store";
 import { setUser } from "../../store/authSlice";
 import {
   Check, Lock, Clock, AlertOctagon, ArrowRight, Video,
@@ -15,6 +14,7 @@ import axios from "axios";
 import { useAlert } from "../../context/AlertContext";
 import EarningsChart from "@/components/EarningsChart";
 import { io } from "socket.io-client";
+import { RootState } from "@/store";
 
 const ONBOARDING_STEPS = [
   { id: 1, title: "Vehicle", url: "/partner/onboarding/vehicle" },
@@ -41,10 +41,8 @@ export default function PartnerDashboard() {
   const [isRetrying, setIsRetrying] = useState(false);
   const [earningsData, setEarningsData] = useState(null);
 
-  // State for fetching the ongoing ride
   const [activeBooking, setActiveBooking] = useState<any>(null);
 
-  // --- PRICING MODAL STATES ---
   const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
   const [isFetchingPricing, setIsFetchingPricing] = useState(false);
   const [isSavingPricing, setIsSavingPricing] = useState(false);
@@ -55,6 +53,9 @@ export default function PartnerDashboard() {
   const [pricingFiles, setPricingFiles] = useState<{ [key: string]: File | null }>({
     frontImageUrl: null, backImageUrl: null, leftImageUrl: null, rightImageUrl: null
   });
+
+  const userRef = useRef(user);
+  useEffect(() => { userRef.current = user; }, [user]);
 
   // Helper to fetch any active ride
   const fetchActiveBooking = async () => {
@@ -79,29 +80,67 @@ export default function PartnerDashboard() {
     }
   }, [dbStep]);
 
-  // --- GLOBAL REQUEST LISTENER ---
+  // --- GLOBAL REQUEST LISTENER & INSTANT REDUX SYNC ---
   useEffect(() => {
-    if (!user?.id) return;
+    if (!userRef.current?.id) return;
     const socketUrl = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || "http://localhost:8000";
     const newSocket = io(socketUrl);
 
-    newSocket.on("connect", () => newSocket.emit("register_partner", user.id));
+    newSocket.on("connect", () => newSocket.emit("register_partner", userRef.current?.id));
     newSocket.on("new_ride_request", () => {
       showAlert("New ride request received! Check pending requests.", "success");
     });
 
-    // Refresh active booking card instantly if user pays or cancels
     newSocket.on("ride_updated", () => fetchActiveBooking());
     newSocket.on("ride_cancelled", () => fetchActiveBooking());
 
+    // REAL-TIME ONBOARDING RECEIVER: Instantly mutate Redux state
+    newSocket.on("onboarding_status_changed", (data: any) => {
+      const currentUser = userRef.current;
+      if (!currentUser) return;
+
+      if (data.type === "DOCS_APPROVED") {
+        showAlert("Documents Approved! Move to Video KYC.", "success");
+        dispatch(setUser({ ...currentUser, partnerOnboardingSteps: 4, videoKycStatus: "PENDING", partnerStatus: "APPROVED" }));
+      } else if (data.type === "DOCS_REJECTED") {
+        showAlert("Documents Rejected. Please re-upload.", "error");
+        dispatch(setUser({ ...currentUser, partnerStatus: "REJECTED", rejectReason: data.reason }));
+      } else if (data.type === "KYC_STARTED") {
+        showAlert("Incoming Video KYC Call Started!", "success");
+        dispatch(setUser({ ...currentUser, videoKycStatus: "IN_PROGRESS", videoKycRoomId: data.roomId }));
+      } else if (data.type === "KYC_APPROVED") {
+        showAlert("Video KYC Approved! Proceeding to pricing.", "success");
+        dispatch(setUser({ ...currentUser, videoKycStatus: "APPROVED", partnerOnboardingSteps: 5, videoKycRoomId: null }));
+      } else if (data.type === "KYC_REJECTED") {
+        showAlert("Video KYC Rejected. Please check the reason.", "error");
+        dispatch(setUser({ ...currentUser, videoKycStatus: "REJECTED", videoKycRejectReason: data.reason, videoKycRoomId: null }));
+      }
+      else if (data.type === "VEHICLE_APPROVED") {
+        showAlert("Vehicle Approved! You are now LIVE.", "success");
+        dispatch(setUser({ ...currentUser, partnerOnboardingSteps: 8, partnerStatus: "APPROVED", rejectReason: null }));
+      } else if (data.type === "VEHICLE_REJECTED") {
+        showAlert("Vehicle Rejected. Please check the reason.", "error");
+        dispatch(setUser({ ...currentUser, partnerStatus: "REJECTED", rejectReason: data.reason }));
+      }
+    });
+
     return () => { newSocket.disconnect(); };
-  }, [user?.id, showAlert]);
+  }, [dispatch, showAlert]);
 
   const handleRetryKyc = async () => {
     setIsRetrying(true);
     try {
       await axios.post("/api/partner/video-kyc/retry");
+
+      const socketUrl = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || "http://localhost:8000";
+      const tempSocket = io(socketUrl);
+      tempSocket.emit("admin_onboarding_action", { partnerId: user?.id, type: "KYC_RETRY_TRIGGERED" });
+
       showAlert("Retry requested! An executive will call you soon.", "success");
+
+      if (user) {
+        dispatch(setUser({ ...user, videoKycStatus: "PENDING", videoKycRejectReason: null }));
+      }
     } catch (error) {
       showAlert("Failed to request retry. Please try again.", "error");
     } finally {
@@ -157,6 +196,10 @@ export default function PartnerDashboard() {
       await axios.post("/api/partner/vehicle/pricing", formData, {
         headers: { "Content-Type": "multipart/form-data" }
       });
+
+      const socketUrl = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || "http://localhost:8000";
+      const tempSocket = io(socketUrl);
+      tempSocket.emit("admin_onboarding_action", { partnerId: user?.id, type: "PRICING_SUBMITTED" });
 
       showAlert("Pricing and images submitted for Final Review!", "success");
       setIsPricingModalOpen(false);
@@ -253,7 +296,7 @@ export default function PartnerDashboard() {
                       <p className="text-red-700 dark:text-red-400/80 mt-1 text-sm md:text-base font-medium">Reason: <span className="text-red-900 dark:text-red-300 font-bold">{rejectReason || "Please review your submitted documents and try again."}</span></p>
                     </div>
                   </div>
-                  <button onClick={() => router.push("/partner/onboarding/documents")} className="shrink-0 w-full md:w-auto bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-xl transition-colors flex items-center justify-center space-x-2">
+                  <button onClick={() => router.push("/partner/onboarding/vehicle")} className="shrink-0 w-full md:w-auto bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-xl transition-colors flex items-center justify-center space-x-2">
                     <span>Update Documents</span><ArrowRight className="w-4 h-4" />
                   </button>
                 </div>
@@ -454,6 +497,12 @@ export default function PartnerDashboard() {
                               onChange={(e) => {
                                 if (e.target.files && e.target.files[0]) {
                                   const file = e.target.files[0];
+
+                                  if (file.size > 4 * 1024 * 1024) {
+                                    showAlert("File too large! Please select an image under 4MB.", "error");
+                                    return;
+                                  }
+
                                   const fakeUrl = URL.createObjectURL(file);
                                   setPricingData({ ...pricingData, [imgField.key]: fakeUrl });
                                   setPricingFiles({ ...pricingFiles, [imgField.key]: file });

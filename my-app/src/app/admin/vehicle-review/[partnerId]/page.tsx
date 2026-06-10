@@ -9,6 +9,7 @@ import {
     CheckCircle2, XCircle, ExternalLink, Loader2, Clock
 } from "lucide-react";
 import { useAlert } from "@/context/AlertContext";
+import { io } from "socket.io-client";
 
 export default function AdminVehicleReviewPage() {
     const params = useParams();
@@ -53,11 +54,15 @@ export default function AdminVehicleReviewPage() {
         try {
             await axios.post(`/api/admin/vehicle-review/${partnerId}`, { action, reason: rejectReason });
 
-            const msg = action === "APPROVE"
-                ? "Vehicle approved! Partner is now LIVE."
-                : "Vehicle rejected successfully.";
+            const socketUrl = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || "http://localhost:8000";
+            const tempSocket = io(socketUrl);
+            tempSocket.emit("admin_onboarding_action", {
+                partnerId: partnerId,
+                type: action === "APPROVE" ? "VEHICLE_APPROVED" : "VEHICLE_REJECTED",
+                reason: rejectReason
+            });
 
-            showAlert(msg, "success");
+            showAlert(`Vehicle successfully ${action.toLowerCase()}ed!`, "success");
             router.push("/");
         } catch (error: any) {
             showAlert(error.response?.data?.error || "Failed to process action", "error");
