@@ -10,7 +10,7 @@
 The platform features three distinct roles — **User**, **Partner (Driver)**, and **Admin** — each with dedicated interfaces, workflows, and real-time capabilities powered by **Socket.IO**. From a strict 7-step Partner onboarding process with live Video KYC, to OTP-verified ride milestones, AI-powered chat suggestions, live map tracking, and Razorpay payment integration — Saarthi handles the complete ride lifecycle from booking to earning, end to end.
 
 [![Live Demo](https://img.shields.io/badge/Live-Demo-brightgreen?style=for-the-badge&logo=vercel)](https://saarthi-nextjs.vercel.app/)
-[![GitHub](https://img.shields.io/badge/GitHub-SAARTHI__NEXTJS-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Prajwal-dev-dsa/SAARTHI_NEXTJS)
+[![GitHub](https://img.shields.io/badge/GitHub-Saarthi-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Prajwal-dev-dsa/Saarthi)
 
 ---
 
@@ -260,8 +260,8 @@ Follow these steps to get Saarthi running on your local machine.
 
 1. **Clone the Repository**
    ```bash
-   git clone https://github.com/Prajwal-dev-dsa/SAARTHI_NEXTJS.git
-   cd SAARTHI_NEXTJS
+   git clone https://github.com/Prajwal-dev-dsa/Saarthi.git
+   cd Saarthi
    ```
 
 2. **Install Dependencies for Both Servers**
@@ -332,6 +332,6 @@ Contributions are welcome! If you'd like to improve the project or add new featu
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/prajwal-dwivedi-799838370/)
 [![Gmail](https://img.shields.io/badge/Gmail-Mail_Me-EA4335?style=for-the-badge&logo=gmail&logoColor=white)](mailto:prajwal77dwivedi@gmail.com)
 
-**GitHub Repository:** https://github.com/Prajwal-dev-dsa/SAARTHI_NEXTJS
+**GitHub Repository:** https://github.com/Prajwal-dev-dsa/Saarthi
 
 **Live Application:** https://saarthi-nextjs.vercel.app/
